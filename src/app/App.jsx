@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '../components/layout/AppShell';
 import { StatusBanner } from '../components/ui/StatusBanner';
 import { appConfig } from './config';
 import { DashboardOverview } from '../features/dashboard/DashboardOverview';
 import { ConfigSummary } from '../features/config/ConfigSummary';
+import { ConfigEditor } from '../features/config/ConfigEditor';
 import { ProjectionPanel } from '../features/projection/ProjectionPanel';
 import { createProjectionMetrics } from '../features/projection/projectionModel';
 import { SchedulingSummary } from '../features/scheduling/SchedulingSummary';
@@ -16,7 +17,7 @@ export const App = () => {
     status,
     source,
     error,
-    entities,
+    entities: initialEntities,
     familias,
     especies,
     parametrosEspecie,
@@ -24,10 +25,39 @@ export const App = () => {
     dates,
   } = planner;
 
+  const [entities, setEntities] = useState([]);
   const [data, setData] = useState({});
+  const [defaultParameters, setDefaultParameters] = useState({
+    especie_id: null,
+    bins_por_hora: 18,
+    horas_por_dia: 16,
+    kg_por_bin: 460,
+  });
 
-  const effectiveData =
-    Object.keys(data).length > 0 ? data : initialData;
+  useEffect(() => {
+    setEntities(initialEntities);
+  }, [initialEntities]);
+
+  useEffect(() => {
+    setData(initialData);
+  }, [initialData]);
+
+  useEffect(() => {
+    const fallback =
+      parametrosEspecie.find((item) => item.especie_id == null) || {
+        especie_id: null,
+        bins_por_hora: 18,
+        horas_por_dia: 16,
+        kg_por_bin: 460,
+      };
+
+    setDefaultParameters({
+      especie_id: null,
+      bins_por_hora: Number(fallback.bins_por_hora ?? 18),
+      horas_por_dia: Number(fallback.horas_por_dia ?? 16),
+      kg_por_bin: Number(fallback.kg_por_bin ?? 460),
+    });
+  }, [parametrosEspecie]);
 
   const familyBySpeciesId = useMemo(() => {
     const families = new Map(familias.map((family) => [Number(family.id), family]));
@@ -36,31 +66,39 @@ export const App = () => {
     );
   }, [familias, especies]);
 
-  const parametersBySpeciesId = useMemo(
-    () =>
-      new Map(
-        parametrosEspecie.map((item) => [
-          item.especie_id == null ? null : Number(item.especie_id),
-          {
-            bins_por_hora: Number(item.bins_por_hora ?? 18),
-            horas_por_dia: Number(item.horas_por_dia ?? 16),
-            kg_por_bin: Number(item.kg_por_bin ?? 460),
-          },
-        ]),
-      ),
-    [parametrosEspecie],
-  );
+  const parametersBySpeciesId = useMemo(() => {
+    const specific = parametrosEspecie.filter((item) => item.especie_id != null);
+
+    return new Map([
+      [
+        null,
+        {
+          bins_por_hora: Number(defaultParameters.bins_por_hora ?? 18),
+          horas_por_dia: Number(defaultParameters.horas_por_dia ?? 16),
+          kg_por_bin: Number(defaultParameters.kg_por_bin ?? 460),
+        },
+      ],
+      ...specific.map((item) => [
+        Number(item.especie_id),
+        {
+          bins_por_hora: Number(item.bins_por_hora ?? 18),
+          horas_por_dia: Number(item.horas_por_dia ?? 16),
+          kg_por_bin: Number(item.kg_por_bin ?? 460),
+        },
+      ]),
+    ]);
+  }, [parametrosEspecie, defaultParameters]);
 
   const metrics = useMemo(
     () =>
       createProjectionMetrics({
         dates,
         entities,
-        data: effectiveData,
+        data,
         familyBySpeciesId,
         parametersBySpeciesId,
       }),
-    [dates, entities, effectiveData, familyBySpeciesId, parametersBySpeciesId],
+    [dates, entities, data, familyBySpeciesId, parametersBySpeciesId],
   );
 
   return (
@@ -75,14 +113,23 @@ export const App = () => {
       {status === 'ready' ? (
         <>
           <DashboardOverview entities={entities} metrics={metrics} />
+
+          <ConfigEditor
+            entities={entities}
+            setEntities={setEntities}
+            defaultParameters={defaultParameters}
+            setDefaultParameters={setDefaultParameters}
+          />
+
           <OperationsEditor
             entities={entities}
             familias={familias}
             especies={especies}
             dates={dates}
-            data={effectiveData}
+            data={data}
             setData={setData}
           />
+
           <div className="layout-grid">
             <ProjectionPanel entities={entities} metrics={metrics} />
             <div className="sidebar-stack">
