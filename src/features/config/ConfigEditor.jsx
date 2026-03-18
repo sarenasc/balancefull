@@ -11,6 +11,8 @@ export const ConfigEditor = ({
   setFamilias,
   especies,
   setEspecies,
+  parametrosEspecie,
+  setParametrosEspecie,
 }) => {
   const [form, setForm] = useState({
     bins_por_hora: defaultParameters?.bins_por_hora ?? 18,
@@ -36,6 +38,8 @@ export const ConfigEditor = ({
     orden: 0,
   });
 
+  const [speciesForms, setSpeciesForms] = useState({});
+
   useEffect(() => {
     setForm({
       bins_por_hora: defaultParameters?.bins_por_hora ?? 18,
@@ -44,17 +48,36 @@ export const ConfigEditor = ({
     });
   }, [defaultParameters]);
 
+  useEffect(() => {
+    const map = {};
+    especies.forEach((species) => {
+      const params = parametrosEspecie.find(
+        (item) => Number(item.especie_id) === Number(species.id),
+      );
+
+      map[species.id] = {
+        bins_por_hora: params?.bins_por_hora ?? defaultParameters?.bins_por_hora ?? 18,
+        horas_por_dia: params?.horas_por_dia ?? defaultParameters?.horas_por_dia ?? 16,
+        kg_por_bin: params?.kg_por_bin ?? defaultParameters?.kg_por_bin ?? 460,
+      };
+    });
+    setSpeciesForms(map);
+  }, [especies, parametrosEspecie, defaultParameters]);
+
   const {
     saving,
     error,
     success,
     toggleVisibility,
     saveDefaultConfig,
+    saveSpeciesParams,
   } = useConfigEditor({
     entities,
     setEntities,
     defaultParameters,
     setDefaultParameters,
+    parametrosEspecie,
+    setParametrosEspecie,
   });
 
   const {
@@ -87,7 +110,7 @@ export const ConfigEditor = ({
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Configuración</p>
-          <h2>Visibilidad, familias y especies</h2>
+          <h2>Visibilidad, familias, especies y parámetros</h2>
         </div>
       </div>
 
@@ -193,6 +216,110 @@ export const ConfigEditor = ({
         >
           {saving ? 'Guardando...' : 'Guardar configuración base'}
         </button>
+      </div>
+
+      <div className="panel panel--compact" style={{ marginBottom: '1rem' }}>
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Parámetros por especie</p>
+            <h2>Productividad específica</h2>
+          </div>
+        </div>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Especie</th>
+                <th>Familia</th>
+                <th>Bins/hora</th>
+                <th>Horas/día</th>
+                <th>Kg/bin</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {especiesConFamilia.map((species) => {
+                const row = speciesForms[species.id] || {
+                  bins_por_hora: defaultParameters?.bins_por_hora ?? 18,
+                  horas_por_dia: defaultParameters?.horas_por_dia ?? 16,
+                  kg_por_bin: defaultParameters?.kg_por_bin ?? 460,
+                };
+
+                return (
+                  <tr key={species.id}>
+                    <td>{species.nombre}</td>
+                    <td>{species.familia_nombre}</td>
+                    <td>
+                      <input
+                        type="number"
+                        min="1"
+                        value={row.bins_por_hora}
+                        onChange={(event) =>
+                          setSpeciesForms((current) => ({
+                            ...current,
+                            [species.id]: {
+                              ...current[species.id],
+                              bins_por_hora: event.target.value,
+                            },
+                          }))
+                        }
+                        style={{ width: '100%', padding: '0.5rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        min="1"
+                        value={row.horas_por_dia}
+                        onChange={(event) =>
+                          setSpeciesForms((current) => ({
+                            ...current,
+                            [species.id]: {
+                              ...current[species.id],
+                              horas_por_dia: event.target.value,
+                            },
+                          }))
+                        }
+                        style={{ width: '100%', padding: '0.5rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        min="1"
+                        value={row.kg_por_bin}
+                        onChange={(event) =>
+                          setSpeciesForms((current) => ({
+                            ...current,
+                            [species.id]: {
+                              ...current[species.id],
+                              kg_por_bin: event.target.value,
+                            },
+                          }))
+                        }
+                        style={{ width: '100%', padding: '0.5rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
+                      />
+                    </td>
+                    <td>
+                      <button
+                        disabled={saving}
+                        onClick={() =>
+                          saveSpeciesParams({
+                            especie: species,
+                            values: speciesForms[species.id],
+                          })
+                        }
+                      >
+                        Guardar
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="panel panel--compact" style={{ marginBottom: '1rem' }}>

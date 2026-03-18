@@ -25,6 +25,8 @@ export const useConfigEditor = ({
   setEntities,
   defaultParameters,
   setDefaultParameters,
+  parametrosEspecie,
+  setParametrosEspecie,
 }) => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -100,11 +102,64 @@ export const useConfigEditor = ({
     }
   };
 
+  const saveSpeciesParams = async ({ especie, values }) => {
+    const payload = {
+      especie_id: Number(especie.id),
+      bins_por_hora: Number(values.bins_por_hora || 18),
+      horas_por_dia: Number(values.horas_por_dia || 16),
+      kg_por_bin: Number(values.kg_por_bin || 460),
+    };
+
+    const previous = [...parametrosEspecie];
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    const nextRow = {
+      especie_id: payload.especie_id,
+      bins_por_hora: payload.bins_por_hora,
+      horas_por_dia: payload.horas_por_dia,
+      kg_por_bin: payload.kg_por_bin,
+      especie_nombre: especie.nombre,
+    };
+
+    setParametrosEspecie((current) => {
+      const withoutDefaults = current.filter((item) => item.especie_id != null);
+      const exists = withoutDefaults.some(
+        (item) => Number(item.especie_id) === Number(payload.especie_id),
+      );
+
+      if (exists) {
+        return current.map((item) =>
+          Number(item.especie_id) === Number(payload.especie_id)
+            ? { ...item, ...nextRow }
+            : item,
+        );
+      }
+
+      return [...current, nextRow];
+    });
+
+    try {
+      await requestJson('/parametros-especie', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      setSuccess(`Parámetros guardados para ${especie.nombre}.`);
+    } catch (saveError) {
+      setParametrosEspecie(previous);
+      setError(saveError.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return {
     saving,
     error,
     success,
     toggleVisibility,
     saveDefaultConfig,
+    saveSpeciesParams,
   };
 };
