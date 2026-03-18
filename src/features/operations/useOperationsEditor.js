@@ -1,0 +1,121 @@
+import { useMemo, useState } from 'react';
+import { appConfig } from '../../app/config';
+
+const apiUrl = appConfig.apiBaseUrl;
+
+const saveCell = async ({ entityId, date, field, value }) => {
+  const response = await fetch(`${apiUrl}/datos/celda`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      exportadora_id: entityId,
+      fecha: date,
+      campo: field,
+      bins: value,
+    }),
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || 'No fue posible guardar la celda.');
+  }
+
+  return response.json().catch(() => ({}));
+};
+
+export const useOperationsEditor = ({ entities, data, setData }) => {
+  const [savingCell, setSavingCell] = useState(null);
+  const [error, setError] = useState(null);
+
+  const visibleEntities = useMemo(
+    () => entities.filter((entity) => Number(entity.visibleLinea ?? 1) === 1),
+    [entities],
+  );
+
+  const getBalanceBeforeDate = ({ entityId, date, useCurado }) => {
+    const entityRows = data[entityId] || {};
+    const dates = Object.keys(entityRows).sort();
+    let balance = 0;
+
+    for (const currentDate of dates) {
+      if (currentDate >= date) break;
+      const row = entityRows[currentDate] || {};
+      balance += useCurado
+        ? Number(row.curado || 0) - Number(row.proceso || 0)
+        : Number(row.cosecha || 0) - Number(row.proceso || 0);
+    }
+
+    return balance;
+  };
+
+  const updateCell = async ({ entity, date, field, value, useCurado }) => {
+    const numericValue = Number(value);
+
+    if (Number.isNaN(numericValue) || numericValue < 0) {
+      setError('Solo se permiten números mayores o iguales a 0.');
+      return false;
+    }
+
+    const previousValue = data[entity.id]?.[date]?.[field] ?? 0;
+    const previousSnapshot = structuredClone(data);
+
+    if (field === 'proceso') {
+      const row = data[entity.id]?.[date] || {};
+      const baseBalance =
+        getBalanceBeforeDate({
+          entityId: entity.id,
+          date,
+          useCurado,
+        }) +
+        (useCurado ? Number(row.curado || 0) : Number(row.cosecha || 0));
+
+      const nextBalance = baseBalance - numericValue;
+
+      if (nextBalance < 0) {
+        const ok = window.confirm(
+          `El balance quedará negativo (${nextBalance}). ¿Deseas guardar de todas formas?`,
+        );
+        if (!ok) return false;
+      }
+    }
+
+    setError(null);
+    setSavingCell(`${entity.id}_${date}_${field}`);
+
+    setData((current) => ({
+      ...current,
+      [entity.id]: {
+        ...current[entity.id],
+        [date]: {
+          ...(current[entity.id]?.[date] || { cosecha: 0, curado: 0, proceso: 0 }),
+          [field]: numericValue,
+        },
+      },
+    }));
+
+    try {
+      await saveCell({
+        entityId: entity.id,
+        date,
+        field,
+        value: numericValue,
+      });
+      return true;
+    } catch (saveError) {
+      setData(previousSnapshot);
+      setError(saveError.message || `No se pudo guardar ${field}.`);
+      return false;
+    } finally {
+      setSavingCell(null);
+    }
+  };
+
+  return {
+    visibleEntities,
+    savingCell,
+    error,
+    updateCell,
+  };
+};
