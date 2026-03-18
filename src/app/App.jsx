@@ -21,6 +21,7 @@ export const App = () => {
     familias: initialFamilias,
     especies: initialEspecies,
     parametrosEspecie: initialParametrosEspecie,
+    holidays: initialHolidays,
     data: initialData,
     dates,
     temporadaId,
@@ -30,6 +31,7 @@ export const App = () => {
   const [familias, setFamilias] = useState([]);
   const [especies, setEspecies] = useState([]);
   const [parametrosEspecie, setParametrosEspecie] = useState([]);
+  const [holidays, setHolidays] = useState([]);
   const [data, setData] = useState({});
   const [defaultParameters, setDefaultParameters] = useState({
     especie_id: null,
@@ -53,6 +55,10 @@ export const App = () => {
   useEffect(() => {
     setParametrosEspecie(initialParametrosEspecie);
   }, [initialParametrosEspecie]);
+
+  useEffect(() => {
+    setHolidays(initialHolidays || []);
+  }, [initialHolidays]);
 
   useEffect(() => {
     setData(initialData);
@@ -141,6 +147,8 @@ export const App = () => {
             setEspecies={setEspecies}
             parametrosEspecie={parametrosEspecie}
             setParametrosEspecie={setParametrosEspecie}
+            holidays={holidays}
+            setHolidays={setHolidays}
           />
 
           <OperationsEditor

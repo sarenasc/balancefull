@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useConfigEditor } from './useConfigEditor';
 import { useCatalogEditor } from './useCatalogEditor';
+import { useHolidayEditor } from './useHolidayEditor';
 
 export const ConfigEditor = ({
   entities,
@@ -13,6 +14,8 @@ export const ConfigEditor = ({
   setEspecies,
   parametrosEspecie,
   setParametrosEspecie,
+  holidays,
+  setHolidays,
 }) => {
   const [form, setForm] = useState({
     bins_por_hora: defaultParameters?.bins_por_hora ?? 18,
@@ -29,6 +32,11 @@ export const ConfigEditor = ({
   const [newEspecie, setNewEspecie] = useState({
     nombre: '',
     familia_id: '',
+  });
+
+  const [newHoliday, setNewHoliday] = useState({
+    fecha: '',
+    nombre: '',
   });
 
   const [editingFamiliaId, setEditingFamiliaId] = useState(null);
@@ -95,6 +103,17 @@ export const ConfigEditor = ({
     setEspecies,
   });
 
+  const {
+    holidaySaving,
+    holidayError,
+    holidaySuccess,
+    addHoliday,
+    deleteHoliday,
+  } = useHolidayEditor({
+    holidays,
+    setHolidays,
+  });
+
   const especiesConFamilia = useMemo(() => {
     return especies.map((species) => {
       const family = familias.find((item) => Number(item.id) === Number(species.familia_id));
@@ -110,7 +129,7 @@ export const ConfigEditor = ({
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Configuración</p>
-          <h2>Visibilidad, familias, especies y parámetros</h2>
+          <h2>Visibilidad, familias, especies, parámetros y feriados</h2>
         </div>
       </div>
 
@@ -118,6 +137,8 @@ export const ConfigEditor = ({
       {success ? <div className="status-banner status-banner--ok">{success}</div> : null}
       {catalogError ? <div className="status-banner status-banner--warn">{catalogError}</div> : null}
       {catalogSuccess ? <div className="status-banner status-banner--ok">{catalogSuccess}</div> : null}
+      {holidayError ? <div className="status-banner status-banner--warn">{holidayError}</div> : null}
+      {holidaySuccess ? <div className="status-banner status-banner--ok">{holidaySuccess}</div> : null}
 
       <div className="panel panel--compact" style={{ marginBottom: '1rem' }}>
         <div className="panel-heading">
@@ -317,6 +338,94 @@ export const ConfigEditor = ({
                   </tr>
                 );
               })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="panel panel--compact" style={{ marginBottom: '1rem' }}>
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Feriados</p>
+            <h2>Calendario operativo</h2>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr auto',
+            gap: '0.75rem',
+            alignItems: 'end',
+            marginBottom: '1rem',
+          }}
+        >
+          <label>
+            <div className="stat-label">Fecha</div>
+            <input
+              type="date"
+              value={newHoliday.fecha}
+              onChange={(event) =>
+                setNewHoliday((current) => ({ ...current, fecha: event.target.value }))
+              }
+              style={{ width: '100%', marginTop: '0.4rem', padding: '0.6rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
+            />
+          </label>
+
+          <label>
+            <div className="stat-label">Nombre (opcional)</div>
+            <input
+              value={newHoliday.nombre}
+              onChange={(event) =>
+                setNewHoliday((current) => ({ ...current, nombre: event.target.value }))
+              }
+              style={{ width: '100%', marginTop: '0.4rem', padding: '0.6rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
+            />
+          </label>
+
+          <button
+            disabled={holidaySaving}
+            onClick={async () => {
+              const ok = await addHoliday(newHoliday);
+              if (ok) {
+                setNewHoliday({ fecha: '', nombre: '' });
+              }
+            }}
+            style={{
+              padding: '0.75rem 1rem',
+              borderRadius: '12px',
+              border: 'none',
+              background: '#0f62fe',
+              color: '#fff',
+              cursor: 'pointer',
+            }}
+          >
+            Agregar feriado
+          </button>
+        </div>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {holidays.map((holiday) => (
+                <tr key={holiday}>
+                  <td>{holiday}</td>
+                  <td>
+                    <button
+                      disabled={holidaySaving}
+                      onClick={() => deleteHoliday(holiday)}
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
