@@ -3,16 +3,27 @@ import { appConfig } from '../../app/config';
 
 const apiUrl = appConfig.apiBaseUrl;
 
-const saveCell = async ({ entityId, date, field, value }) => {
-  const response = await fetch(`${apiUrl}/datos/celda`, {
+const saveCellBySection = async ({ section, entityId, temporadaId, date, value }) => {
+  const endpointMap = {
+    cosecha: '/datos/cosecha',
+    curado: '/datos/curado',
+    proceso: '/datos/proceso',
+  };
+
+  const endpoint = endpointMap[section];
+  if (!endpoint) {
+    throw new Error(`Sección no soportada: ${section}`);
+  }
+
+  const response = await fetch(`${apiUrl}${endpoint}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       exportadora_id: entityId,
+      temporada_id: temporadaId,
       fecha: date,
-      campo: field,
       bins: value,
     }),
   });
@@ -25,7 +36,7 @@ const saveCell = async ({ entityId, date, field, value }) => {
   return response.json().catch(() => ({}));
 };
 
-export const useOperationsEditor = ({ entities, data, setData }) => {
+export const useOperationsEditor = ({ entities, data, setData, temporadaId }) => {
   const [savingCell, setSavingCell] = useState(null);
   const [error, setError] = useState(null);
 
@@ -58,7 +69,6 @@ export const useOperationsEditor = ({ entities, data, setData }) => {
       return false;
     }
 
-    const previousValue = data[entity.id]?.[date]?.[field] ?? 0;
     const previousSnapshot = structuredClone(data);
 
     if (field === 'proceso') {
@@ -96,10 +106,11 @@ export const useOperationsEditor = ({ entities, data, setData }) => {
     }));
 
     try {
-      await saveCell({
+      await saveCellBySection({
+        section: field,
         entityId: entity.id,
+        temporadaId,
         date,
-        field,
         value: numericValue,
       });
       return true;

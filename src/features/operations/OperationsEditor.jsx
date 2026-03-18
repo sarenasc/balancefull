@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { formatDate } from '../../utils/date';
-import { formatNumber } from '../../utils/format';
 import { useOperationsEditor } from './useOperationsEditor';
 
 const getFamilyByEntity = ({ entity, familias, especies }) => {
@@ -16,11 +15,13 @@ export const OperationsEditor = ({
   dates,
   data,
   setData,
+  temporadaId,
 }) => {
   const { visibleEntities, savingCell, error, updateCell } = useOperationsEditor({
     entities,
     data,
     setData,
+    temporadaId,
   });
 
   const previewDates = useMemo(() => dates.slice(0, 7), [dates]);

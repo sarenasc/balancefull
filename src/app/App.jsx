@@ -23,6 +23,7 @@ export const App = () => {
     parametrosEspecie,
     data: initialData,
     dates,
+    temporadaId,
   } = planner;
 
   const [entities, setEntities] = useState([]);
@@ -128,6 +129,7 @@ export const App = () => {
             dates={dates}
             data={data}
             setData={setData}
+            temporadaId={temporadaId}
           />
 
           <div className="layout-grid">

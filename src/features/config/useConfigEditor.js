@@ -3,13 +3,13 @@ import { appConfig } from '../../app/config';
 
 const apiUrl = appConfig.apiBaseUrl;
 
-const postJson = async (path, body) => {
+const requestJson = async (path, options = {}) => {
   const response = await fetch(`${apiUrl}${path}`, {
-    method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...(options.headers || {}),
     },
-    body: JSON.stringify(body),
+    ...options,
   });
 
   if (!response.ok) {
@@ -45,9 +45,17 @@ export const useConfigEditor = ({
     );
 
     try {
-      await postJson('/exportadoras/visibilidad', {
-        exportadora_id: entity.id,
-        visible_linea: nextValue,
+      await requestJson(`/exportadoras/${entity.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          nombre: entity.exportadora,
+          especie: entity.especie,
+          especie_id: entity.especieId,
+          variedad: entity.variedad,
+          color_idx: entity.colorIdx,
+          visible_linea: nextValue,
+          activa: 1,
+        }),
       });
       setSuccess(`Visibilidad actualizada para ${entity.label}.`);
     } catch (saveError) {
@@ -79,7 +87,10 @@ export const useConfigEditor = ({
     });
 
     try {
-      await postJson('/configuracion', payload);
+      await requestJson('/configuracion', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
       setSuccess('Parámetros estándar guardados correctamente.');
     } catch (saveError) {
       setDefaultParameters(previous);
