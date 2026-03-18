@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useConfigEditor } from './useConfigEditor';
 
 export const ConfigEditor = ({
@@ -12,6 +12,14 @@ export const ConfigEditor = ({
     horas_por_dia: defaultParameters?.horas_por_dia ?? 16,
     kg_por_bin: defaultParameters?.kg_por_bin ?? 460,
   });
+
+  useEffect(() => {
+    setForm({
+      bins_por_hora: defaultParameters?.bins_por_hora ?? 18,
+      horas_por_dia: defaultParameters?.horas_por_dia ?? 16,
+      kg_por_bin: defaultParameters?.kg_por_bin ?? 460,
+    });
+  }, [defaultParameters]);
 
   const {
     saving,

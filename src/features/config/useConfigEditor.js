@@ -88,7 +88,7 @@ export const useConfigEditor = ({
 
     try {
       await requestJson('/configuracion', {
-        method: 'POST',
+        method: 'PUT',
         body: JSON.stringify(payload),
       });
       setSuccess('Parámetros estándar guardados correctamente.');
