@@ -18,8 +18,8 @@ export const App = () => {
     source,
     error,
     entities: initialEntities,
-    familias,
-    especies,
+    familias: initialFamilias,
+    especies: initialEspecies,
     parametrosEspecie,
     data: initialData,
     dates,
@@ -27,6 +27,8 @@ export const App = () => {
   } = planner;
 
   const [entities, setEntities] = useState([]);
+  const [familias, setFamilias] = useState([]);
+  const [especies, setEspecies] = useState([]);
   const [data, setData] = useState({});
   const [defaultParameters, setDefaultParameters] = useState({
     especie_id: null,
@@ -38,6 +40,14 @@ export const App = () => {
   useEffect(() => {
     setEntities(initialEntities);
   }, [initialEntities]);
+
+  useEffect(() => {
+    setFamilias(initialFamilias);
+  }, [initialFamilias]);
+
+  useEffect(() => {
+    setEspecies(initialEspecies);
+  }, [initialEspecies]);
 
   useEffect(() => {
     setData(initialData);
@@ -61,9 +71,9 @@ export const App = () => {
   }, [parametrosEspecie]);
 
   const familyBySpeciesId = useMemo(() => {
-    const families = new Map(familias.map((family) => [Number(family.id), family]));
+    const familyMap = new Map(familias.map((family) => [Number(family.id), family]));
     return new Map(
-      especies.map((species) => [Number(species.id), families.get(Number(species.familia_id))]),
+      especies.map((species) => [Number(species.id), familyMap.get(Number(species.familia_id))]),
     );
   }, [familias, especies]);
 
@@ -120,6 +130,10 @@ export const App = () => {
             setEntities={setEntities}
             defaultParameters={defaultParameters}
             setDefaultParameters={setDefaultParameters}
+            familias={familias}
+            setFamilias={setFamilias}
+            especies={especies}
+            setEspecies={setEspecies}
           />
 
           <OperationsEditor
