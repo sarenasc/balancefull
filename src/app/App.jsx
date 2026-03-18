@@ -32,6 +32,7 @@ export const App = () => {
   const [especies, setEspecies] = useState([]);
   const [parametrosEspecie, setParametrosEspecie] = useState([]);
   const [holidays, setHolidays] = useState([]);
+  const [curadoHoursConfig, setCuradoHoursConfig] = useState({});
   const [data, setData] = useState({});
   const [defaultParameters, setDefaultParameters] = useState({
     especie_id: null,
@@ -80,6 +81,25 @@ export const App = () => {
       kg_por_bin: Number(fallback.kg_por_bin ?? 460),
     });
   }, [parametrosEspecie]);
+
+  useEffect(() => {
+    const loadCuradoHours = async () => {
+      try {
+        const response = await fetch(`${appConfig.apiBaseUrl}/curado-horas-config`);
+        if (!response.ok) throw new Error('No fue posible cargar horas de curado');
+        const rows = await response.json();
+        const map = {};
+        rows.forEach((row) => {
+          map[Number(row.exportadora_id)] = Number(row.horas_curado);
+        });
+        setCuradoHoursConfig(map);
+      } catch (_error) {
+        setCuradoHoursConfig({});
+      }
+    };
+
+    loadCuradoHours();
+  }, []);
 
   const familyBySpeciesId = useMemo(() => {
     const familyMap = new Map(familias.map((family) => [Number(family.id), family]));
@@ -149,6 +169,8 @@ export const App = () => {
             setParametrosEspecie={setParametrosEspecie}
             holidays={holidays}
             setHolidays={setHolidays}
+            curadoHoursConfig={curadoHoursConfig}
+            setCuradoHoursConfig={setCuradoHoursConfig}
           />
 
           <OperationsEditor

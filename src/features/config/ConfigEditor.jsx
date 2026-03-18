@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useConfigEditor } from './useConfigEditor';
 import { useCatalogEditor } from './useCatalogEditor';
 import { useHolidayEditor } from './useHolidayEditor';
+import { useCuradoHoursEditor } from './useCuradoHoursEditor';
 
 export const ConfigEditor = ({
   entities,
@@ -16,6 +17,8 @@ export const ConfigEditor = ({
   setParametrosEspecie,
   holidays,
   setHolidays,
+  curadoHoursConfig,
+  setCuradoHoursConfig,
 }) => {
   const [form, setForm] = useState({
     bins_por_hora: defaultParameters?.bins_por_hora ?? 18,
@@ -47,6 +50,7 @@ export const ConfigEditor = ({
   });
 
   const [speciesForms, setSpeciesForms] = useState({});
+  const [curadoForms, setCuradoForms] = useState({});
 
   useEffect(() => {
     setForm({
@@ -71,6 +75,17 @@ export const ConfigEditor = ({
     });
     setSpeciesForms(map);
   }, [especies, parametrosEspecie, defaultParameters]);
+
+  useEffect(() => {
+    const map = {};
+    entities.forEach((entity) => {
+      map[entity.id] =
+        curadoHoursConfig?.[entity.id] ??
+        entity.horas_curado ??
+        48;
+    });
+    setCuradoForms(map);
+  }, [entities, curadoHoursConfig]);
 
   const {
     saving,
@@ -114,6 +129,16 @@ export const ConfigEditor = ({
     setHolidays,
   });
 
+  const {
+    curadoSaving,
+    curadoError,
+    curadoSuccess,
+    saveCuradoHours,
+  } = useCuradoHoursEditor({
+    curadoHoursConfig,
+    setCuradoHoursConfig,
+  });
+
   const especiesConFamilia = useMemo(() => {
     return especies.map((species) => {
       const family = familias.find((item) => Number(item.id) === Number(species.familia_id));
@@ -129,7 +154,7 @@ export const ConfigEditor = ({
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Configuración</p>
-          <h2>Visibilidad, familias, especies, parámetros y feriados</h2>
+          <h2>Visibilidad, familias, especies, parámetros, feriados y curado</h2>
         </div>
       </div>
 
@@ -139,6 +164,8 @@ export const ConfigEditor = ({
       {catalogSuccess ? <div className="status-banner status-banner--ok">{catalogSuccess}</div> : null}
       {holidayError ? <div className="status-banner status-banner--warn">{holidayError}</div> : null}
       {holidaySuccess ? <div className="status-banner status-banner--ok">{holidaySuccess}</div> : null}
+      {curadoError ? <div className="status-banner status-banner--warn">{curadoError}</div> : null}
+      {curadoSuccess ? <div className="status-banner status-banner--ok">{curadoSuccess}</div> : null}
 
       <div className="panel panel--compact" style={{ marginBottom: '1rem' }}>
         <div className="panel-heading">
@@ -422,6 +449,65 @@ export const ConfigEditor = ({
                       onClick={() => deleteHoliday(holiday)}
                     >
                       Eliminar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="panel panel--compact" style={{ marginBottom: '1rem' }}>
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Horas de curado</p>
+            <h2>Configuración por exportadora</h2>
+          </div>
+        </div>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Exportadora</th>
+                <th>Especie</th>
+                <th>Variedad</th>
+                <th>Horas curado</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entities.map((entity) => (
+                <tr key={entity.id}>
+                  <td>{entity.exportadora}</td>
+                  <td>{entity.especie}</td>
+                  <td>{entity.variedad || '—'}</td>
+                  <td>
+                    <input
+                      type="number"
+                      min="1"
+                      value={curadoForms[entity.id] ?? 48}
+                      onChange={(event) =>
+                        setCuradoForms((current) => ({
+                          ...current,
+                          [entity.id]: event.target.value,
+                        }))
+                      }
+                      style={{ width: '100%', padding: '0.5rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
+                    />
+                  </td>
+                  <td>
+                    <button
+                      disabled={curadoSaving}
+                      onClick={() =>
+                        saveCuradoHours({
+                          exportadoraId: entity.id,
+                          horasCurado: curadoForms[entity.id],
+                        })
+                      }
+                    >
+                      Guardar
                     </button>
                   </td>
                 </tr>
