@@ -16,12 +16,14 @@ export const OperationsEditor = ({
   data,
   setData,
   temporadaId,
+  curadoHoursConfig,
 }) => {
   const { visibleEntities, savingCell, error, updateCell } = useOperationsEditor({
     entities,
     data,
     setData,
     temporadaId,
+    curadoHoursConfig,
   });
 
   const previewDates = useMemo(() => dates.slice(0, 7), [dates]);
@@ -54,7 +56,7 @@ export const OperationsEditor = ({
               const useCurado = Boolean(family?.usa_curado);
 
               const fields = useCurado
-                ? ['curado', 'proceso']
+                ? ['curado', 'proceso', 'cosecha']
                 : ['cosecha', 'proceso'];
 
               return fields.map((field) => (
@@ -100,8 +102,8 @@ export const OperationsEditor = ({
       </div>
 
       <p className="body-copy" style={{ marginTop: '1rem' }}>
-        Vista inicial de migración: muestra solo los primeros 7 días y permite edición directa.
-        El valor visible se guarda al salir del input.
+        Si la familia usa curado, guardar cosecha puede generar automáticamente el valor de curado
+        según las horas configuradas por exportadora.
       </p>
     </section>
   );

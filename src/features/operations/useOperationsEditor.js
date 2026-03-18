@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { appConfig } from '../../app/config';
+import { addDays } from '../../utils/date';
 
 const apiUrl = appConfig.apiBaseUrl;
 
@@ -36,7 +37,13 @@ const saveCellBySection = async ({ section, entityId, temporadaId, date, value }
   return response.json().catch(() => ({}));
 };
 
-export const useOperationsEditor = ({ entities, data, setData, temporadaId }) => {
+export const useOperationsEditor = ({
+  entities,
+  data,
+  setData,
+  temporadaId,
+  curadoHoursConfig,
+}) => {
   const [savingCell, setSavingCell] = useState(null);
   const [error, setError] = useState(null);
 
@@ -113,6 +120,34 @@ export const useOperationsEditor = ({ entities, data, setData, temporadaId }) =>
         date,
         value: numericValue,
       });
+
+      if (field === 'cosecha' && useCurado) {
+        const horasCurado = Number(curadoHoursConfig?.[entity.id] ?? entity.horas_curado ?? 48);
+        const diasOffset = Math.round(horasCurado / 24) + 1;
+        const curadoFecha = addDays(date, diasOffset);
+
+        if (data[entity.id]?.[curadoFecha] !== undefined) {
+          await saveCellBySection({
+            section: 'curado',
+            entityId: entity.id,
+            temporadaId,
+            date: curadoFecha,
+            value: numericValue,
+          });
+
+          setData((current) => ({
+            ...current,
+            [entity.id]: {
+              ...current[entity.id],
+              [curadoFecha]: {
+                ...(current[entity.id]?.[curadoFecha] || { cosecha: 0, curado: 0, proceso: 0 }),
+                curado: numericValue,
+              },
+            },
+          }));
+        }
+      }
+
       return true;
     } catch (saveError) {
       setData(previousSnapshot);

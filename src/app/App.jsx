@@ -181,6 +181,7 @@ export const App = () => {
             data={data}
             setData={setData}
             temporadaId={temporadaId}
+            curadoHoursConfig={curadoHoursConfig}
           />
 
           <div className="layout-grid">
