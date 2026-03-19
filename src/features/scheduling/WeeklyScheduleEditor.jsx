@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { appConfig } from '../../app/config';
 
 const apiUrl = appConfig.apiBaseUrl;
@@ -107,10 +107,26 @@ const dragCardStyle = {
   border: '1px solid #cbd5e1',
   background: '#fff',
   boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
+  userSelect: 'none',
+};
+
+const eraseCardStyle = {
+  ...dragCardStyle,
+  cursor: 'pointer',
+  borderStyle: 'dashed',
 };
 
 const getEntityLabel = (entity) =>
   entity?.label || entity?.exportadora || entity?.nombre || `Exportadora ${entity?.id}`;
+
+const getToolLabel = (tool) => {
+  if (!tool) return 'Ninguno';
+  if (tool.type === 'entity') return `Exportadora · ${getEntityLabel(tool.entity)}`;
+  if (tool.type === 'restriction') return `Restricción · ${tool.restriction.nombre}`;
+  if (tool.type === 'erase-entity') return 'Borrar exportadoras';
+  if (tool.type === 'erase-restriction') return 'Borrar restricciones';
+  return 'Ninguno';
+};
 
 export const WeeklyScheduleEditor = ({
   turnosDefinicion,
@@ -128,6 +144,9 @@ export const WeeklyScheduleEditor = ({
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [dragItem, setDragItem] = useState(null);
+  const [paintTool, setPaintTool] = useState(null);
+  const [isPainting, setIsPainting] = useState(false);
+  const [dirty, setDirty] = useState(false);
 
   const dates = useMemo(() => getDatesForWeek(semana, anio), [semana, anio]);
 
@@ -200,7 +219,7 @@ export const WeeklyScheduleEditor = ({
       .filter((turno) => turno.slots.length > 0);
   }, [orderedTurnos, timeSlots]);
 
-  const loadWeek = async () => {
+  const loadWeek = useCallback(async () => {
     const [rows, restrictionRows] = await Promise.all([
       requestJson(`/turnos?semana=${semana}&anio=${anio}`),
       requestJson(`/turnos-restricciones?semana=${semana}&anio=${anio}`),
@@ -227,7 +246,8 @@ export const WeeklyScheduleEditor = ({
       };
     });
     setRestricciones(nextRestrictions);
-  };
+    setDirty(false);
+  }, [semana, anio]);
 
   useEffect(() => {
     const run = async () => {
@@ -245,61 +265,76 @@ export const WeeklyScheduleEditor = ({
     };
 
     run();
-  }, [semana, anio]);
+  }, [loadWeek]);
 
-  const handleDragStart = (payload) => {
-    setDragItem(payload);
+  useEffect(() => {
+    const handleMouseUp = () => {
+      if (isPainting) {
+        setIsPainting(false);
+        setPaintTool(null);
+      }
+    };
+
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => window.removeEventListener('mouseup', handleMouseUp);
+  }, [isPainting]);
+
+  const markDirty = () => {
+    setDirty(true);
+    setSuccess(null);
   };
 
-  const handleDrop = (fecha, hora) => {
-    if (!dragItem) return;
+  const applyToolToCell = (tool, fecha, hora) => {
+    if (!tool) return;
 
     const key = `${fecha}_${hora}`;
 
-    if (dragItem.type === 'entity') {
+    if (tool.type === 'entity') {
       setAssignments((current) => ({
         ...current,
-        [key]: String(dragItem.entity.id),
+        [key]: String(tool.entity.id),
       }));
+      markDirty();
     }
 
-    if (dragItem.type === 'restriction') {
+    if (tool.type === 'restriction') {
       setRestricciones((current) => ({
         ...current,
         [key]: {
-          id: dragItem.restriction.id,
-          nombre: dragItem.restriction.nombre,
-          color: dragItem.restriction.color,
+          id: tool.restriction.id,
+          nombre: tool.restriction.nombre,
+          color: tool.restriction.color,
         },
       }));
+      markDirty();
     }
 
-    setDragItem(null);
+    if (tool.type === 'erase-entity') {
+      setAssignments((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+      markDirty();
+    }
+
+    if (tool.type === 'erase-restriction') {
+      setRestricciones((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+      markDirty();
+    }
   };
 
-  const removeAssignment = (fecha, hora) => {
-    const key = `${fecha}_${hora}`;
-    setAssignments((current) => {
-      const next = { ...current };
-      delete next[key];
-      return next;
-    });
-  };
+  const saveCalendar = useCallback(async (options = {}) => {
+    const { silent = false } = options;
 
-  const removeRestriction = (fecha, hora) => {
-    const key = `${fecha}_${hora}`;
-    setRestricciones((current) => {
-      const next = { ...current };
-      delete next[key];
-      return next;
-    });
-  };
-
-  const saveCalendar = async () => {
     try {
       setSaving(true);
       setError(null);
-      setSuccess(null);
+      if (!silent) setSuccess(null);
 
       const dbMap = {};
       rowsFromDb.forEach((row) => {
@@ -374,12 +409,60 @@ export const WeeklyScheduleEditor = ({
       }
 
       await loadWeek();
-      setSuccess('Calendario semanal y restricciones guardados correctamente.');
+      if (silent) {
+        setSuccess('Cambios guardados automáticamente.');
+      } else {
+        setSuccess('Calendario semanal y restricciones guardados correctamente.');
+      }
     } catch (saveError) {
       setError(saveError.message);
     } finally {
       setSaving(false);
     }
+  }, [rowsFromDb, restrictionRowsFromDb, assignments, restricciones, semana, anio, loadWeek]);
+
+  useEffect(() => {
+    if (!dirty || saving) return;
+
+    const timer = window.setTimeout(() => {
+      saveCalendar({ silent: true });
+    }, 900);
+
+    return () => window.clearTimeout(timer);
+  }, [dirty, saving, assignments, restricciones, saveCalendar]);
+
+  const handleDragStart = (payload) => {
+    setDragItem(payload);
+  };
+
+  const handleDrop = (fecha, hora) => {
+    if (!dragItem) return;
+    applyToolToCell(dragItem, fecha, hora);
+    setDragItem(null);
+  };
+
+  const beginPaint = (tool) => {
+    setPaintTool(tool);
+    setIsPainting(false);
+  };
+
+  const startPaintingCell = (fecha, hora) => {
+    if (!paintTool) return;
+    setIsPainting(true);
+    applyToolToCell(paintTool, fecha, hora);
+  };
+
+  const continuePaintingCell = (fecha, hora) => {
+    if (!paintTool || !isPainting) return;
+    applyToolToCell(paintTool, fecha, hora);
+  };
+
+  const removeAssignment = (fecha, hora) => {
+    applyToolToCell({ type: 'erase-entity' }, fecha, hora);
+  };
+
+  const removeRestriction = (fecha, hora) => {
+    applyToolToCell({ type: 'erase-restriction' }, fecha, hora);
   };
 
   const clearWeek = async () => {
@@ -408,6 +491,7 @@ export const WeeklyScheduleEditor = ({
       setRestrictionRowsFromDb([]);
       setAssignments({});
       setRestricciones({});
+      setDirty(false);
       setSuccess(`Semana ${semana}/${anio} limpiada correctamente.`);
     } catch (clearError) {
       setError(clearError.message);
@@ -474,7 +558,7 @@ export const WeeklyScheduleEditor = ({
 
         <button
           disabled={saving}
-          onClick={saveCalendar}
+          onClick={() => saveCalendar({ silent: false })}
           style={{
             padding: '0.75rem 1rem',
             borderRadius: '12px',
@@ -503,51 +587,137 @@ export const WeeklyScheduleEditor = ({
         </button>
       </div>
 
-      <div style={{ ...compactPanelStyle }}>
-        <div className="stat-label" style={{ marginBottom: '0.75rem' }}>
-          Exportadoras (arrastra al calendario)
+      <div style={{ ...compactPanelStyle, display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div>
+          <div className="stat-label">Modo pintar</div>
+          <div style={{ fontSize: '0.86rem', color: '#475569', marginTop: '0.2rem' }}>
+            Haz clic en una tarjeta y pinta varios bloques. Al soltar el mouse, la herramienta se desmarca sola.
+          </div>
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.7rem' }}>
-          {visibleEntities.map((entity) => (
-            <div
-              key={entity.id}
-              draggable
-              onDragStart={() => handleDragStart({ type: 'entity', entity })}
-              onDragEnd={() => setDragItem(null)}
-              style={dragCardStyle}
-            >
-              <div style={{ fontWeight: 700, color: '#0f172a' }}>
-                {getEntityLabel(entity)}
-              </div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>
-                ID {entity.id}
-              </div>
+
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {paintTool ? (
+            <div style={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 700 }}>
+              Activo: {getToolLabel(paintTool)}
             </div>
-          ))}
+          ) : (
+            <div style={{ fontSize: '0.82rem', color: '#64748b' }}>Sin herramienta activa</div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setPaintTool(null);
+              setIsPainting(false);
+            }}
+            style={{
+              padding: '0.55rem 0.85rem',
+              borderRadius: '10px',
+              border: '1px solid #cbd5e1',
+              background: '#fff',
+              cursor: 'pointer',
+            }}
+          >
+            Limpiar herramienta
+          </button>
         </div>
       </div>
 
       <div style={{ ...compactPanelStyle }}>
         <div className="stat-label" style={{ marginBottom: '0.75rem' }}>
-          Restricciones (arrastra al calendario)
+          Exportadoras
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.7rem' }}>
-          {tiposRestriccion.map((tipo) => (
-            <div
-              key={tipo.id}
-              draggable
-              onDragStart={() => handleDragStart({ type: 'restriction', restriction: tipo })}
-              onDragEnd={() => setDragItem(null)}
-              style={{
-                ...dragCardStyle,
-                borderColor: tipo.color,
-                color: tipo.color,
-                background: `${tipo.color}14`,
-              }}
-            >
-              <div style={{ fontWeight: 800 }}>{tipo.nombre}</div>
+          {visibleEntities.map((entity) => {
+            const selected =
+              paintTool?.type === 'entity' &&
+              String(paintTool?.entity?.id) === String(entity.id);
+
+            return (
+              <div
+                key={entity.id}
+                draggable
+                onDragStart={() => handleDragStart({ type: 'entity', entity })}
+                onDragEnd={() => setDragItem(null)}
+                onClick={() => beginPaint({ type: 'entity', entity })}
+                style={{
+                  ...dragCardStyle,
+                  borderColor: selected ? '#2563eb' : '#cbd5e1',
+                  boxShadow: selected ? '0 0 0 2px rgba(37,99,235,0.18)' : dragCardStyle.boxShadow,
+                  background: selected ? '#eff6ff' : '#fff',
+                }}
+              >
+                <div style={{ fontWeight: 700, color: '#0f172a' }}>
+                  {getEntityLabel(entity)}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>
+                  ID {entity.id}
+                </div>
+              </div>
+            );
+          })}
+
+          <div
+            onClick={() => beginPaint({ type: 'erase-entity' })}
+            style={{
+              ...eraseCardStyle,
+              borderColor: paintTool?.type === 'erase-entity' ? '#dc2626' : '#fca5a5',
+              background: paintTool?.type === 'erase-entity' ? '#fef2f2' : '#fff',
+              color: '#dc2626',
+            }}
+          >
+            <div style={{ fontWeight: 800 }}>Borrar exportadoras</div>
+            <div style={{ fontSize: '0.75rem', marginTop: '0.2rem' }}>
+              Pinta para limpiar asignaciones
             </div>
-          ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ ...compactPanelStyle }}>
+        <div className="stat-label" style={{ marginBottom: '0.75rem' }}>
+          Restricciones
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.7rem' }}>
+          {tiposRestriccion.map((tipo) => {
+            const selected =
+              paintTool?.type === 'restriction' &&
+              String(paintTool?.restriction?.id) === String(tipo.id);
+
+            return (
+              <div
+                key={tipo.id}
+                draggable
+                onDragStart={() => handleDragStart({ type: 'restriction', restriction: tipo })}
+                onDragEnd={() => setDragItem(null)}
+                onClick={() => beginPaint({ type: 'restriction', restriction: tipo })}
+                style={{
+                  ...dragCardStyle,
+                  borderColor: tipo.color,
+                  color: tipo.color,
+                  background: selected ? `${tipo.color}26` : `${tipo.color}14`,
+                  boxShadow: selected ? `0 0 0 2px ${tipo.color}33` : dragCardStyle.boxShadow,
+                }}
+              >
+                <div style={{ fontWeight: 800 }}>{tipo.nombre}</div>
+              </div>
+            );
+          })}
+
+          <div
+            onClick={() => beginPaint({ type: 'erase-restriction' })}
+            style={{
+              ...eraseCardStyle,
+              borderColor: paintTool?.type === 'erase-restriction' ? '#dc2626' : '#fca5a5',
+              background: paintTool?.type === 'erase-restriction' ? '#fef2f2' : '#fff',
+              color: '#dc2626',
+            }}
+          >
+            <div style={{ fontWeight: 800 }}>Borrar restricciones</div>
+            <div style={{ fontSize: '0.75rem', marginTop: '0.2rem' }}>
+              Pinta para limpiar restricciones
+            </div>
+          </div>
         </div>
       </div>
 
@@ -631,14 +801,19 @@ export const WeeklyScheduleEditor = ({
                           key={key}
                           onDragOver={(event) => event.preventDefault()}
                           onDrop={() => handleDrop(date, hora)}
+                          onMouseDown={() => startPaintingCell(date, hora)}
+                          onMouseEnter={() => continuePaintingCell(date, hora)}
                           style={{
                             border: '1px solid #dbe4f0',
                             padding: '0.5rem',
                             verticalAlign: 'top',
                             background: selectedRestriction?.color
                               ? `${selectedRestriction.color}16`
-                              : '#fff',
+                              : isPainting
+                                ? '#f8fafc'
+                                : '#fff',
                             minHeight: '86px',
+                            cursor: paintTool ? 'crosshair' : 'default',
                           }}
                         >
                           <div style={{ display: 'grid', gap: '0.45rem' }}>
@@ -671,7 +846,11 @@ export const WeeklyScheduleEditor = ({
                               </div>
                             ) : (
                               <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                                Suelta aquí una exportadora
+                                {paintTool?.type === 'entity'
+                                  ? 'Mantén apretado y pinta bloques'
+                                  : paintTool?.type === 'erase-entity'
+                                    ? 'Pinta para borrar exportadoras'
+                                    : 'Suelta o pinta una exportadora'}
                               </div>
                             )}
 
@@ -702,7 +881,11 @@ export const WeeklyScheduleEditor = ({
                               </div>
                             ) : (
                               <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                                Suelta aquí una restricción
+                                {paintTool?.type === 'restriction'
+                                  ? 'Mantén apretado y pinta bloques'
+                                  : paintTool?.type === 'erase-restriction'
+                                    ? 'Pinta para borrar restricciones'
+                                    : 'Suelta o pinta una restricción'}
                               </div>
                             )}
                           </div>
