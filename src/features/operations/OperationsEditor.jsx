@@ -72,7 +72,24 @@ export const OperationsEditor = ({
                         <input
                           type="number"
                           min="0"
-                          defaultValue={value}
+                          value={value}
+                          onChange={(event) => {
+                            const rawValue = event.target.value;
+                            setData((current) => ({
+                              ...current,
+                              [entity.id]: {
+                                ...current[entity.id],
+                                [date]: {
+                                  ...(current[entity.id]?.[date] || {
+                                    cosecha: 0,
+                                    curado: 0,
+                                    proceso: 0,
+                                  }),
+                                  [field]: rawValue === '' ? 0 : Number(rawValue),
+                                },
+                              },
+                            }));
+                          }}
                           onBlur={(event) =>
                             updateCell({
                               entity,
