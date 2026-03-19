@@ -14,6 +14,15 @@ import { RestrictionTypeEditor } from '../features/scheduling/RestrictionTypeEdi
 import { OperationsEditor } from '../features/operations/OperationsEditor';
 import { usePlannerData } from '../hooks/usePlannerData';
 
+const panelHintStyle = {
+  marginBottom: '1rem',
+  padding: '1rem 1.1rem',
+  border: '1px solid #dbe4f0',
+  borderRadius: '12px',
+  background: '#fff',
+  boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)',
+};
+
 export const App = () => {
   const planner = usePlannerData();
   const {
@@ -30,6 +39,7 @@ export const App = () => {
     temporadaId,
   } = planner;
 
+  const [activeView, setActiveView] = useState('operacion');
   const [entities, setEntities] = useState([]);
   const [familias, setFamilias] = useState([]);
   const [especies, setEspecies] = useState([]);
@@ -178,76 +188,190 @@ export const App = () => {
     [dates, entities, data, familyBySpeciesId, parametersBySpeciesId],
   );
 
+  const navSections = [
+    {
+      label: 'Principal',
+      items: [
+        {
+          key: 'operacion',
+          label: 'Operación',
+          icon: '🧮',
+          description:
+            'Edición rápida de cosecha, curado y proceso. Desde aquí nace la data base del balance.',
+        },
+        {
+          key: 'dashboard',
+          label: 'Dashboard',
+          icon: '📊',
+          description:
+            'Vista general y resumida. Ideal para revisar el estado global sin editar datos.',
+        },
+      ],
+    },
+    {
+      label: 'Planificación',
+      items: [
+        {
+          key: 'calendario',
+          label: 'Calendario',
+          icon: '🗓️',
+          description:
+            'Planificación semanal de turnos y restricciones. Se alimenta desde Operación.',
+        },
+      ],
+    },
+    {
+      label: 'Parámetros',
+      items: [
+        {
+          key: 'configuracion',
+          label: 'Configuración',
+          icon: '⚙️',
+          description:
+            'Familias, especies, parámetros, visibilidad, feriados y horas de curado.',
+        },
+      ],
+    },
+  ];
+
+  const renderDashboard = () => (
+    <>
+      <div style={panelHintStyle}>
+        <div style={{ fontSize: '0.78rem', letterSpacing: '0.18em', color: '#64748b', textTransform: 'uppercase' }}>
+          Dashboard
+        </div>
+        <div style={{ marginTop: '0.35rem', fontSize: '0.95rem', color: '#334155' }}>
+          Vista general del sistema. Aquí irán luego los KPI reales una vez que Operación y Balance estén consolidados.
+        </div>
+      </div>
+
+      <DashboardOverview entities={entities} metrics={metrics} />
+
+      <div className="layout-grid">
+        <ProjectionPanel entities={entities} metrics={metrics} />
+        <div className="sidebar-stack">
+          <ConfigSummary
+            apiBaseUrl={appConfig.apiBaseUrl}
+            planningStart={appConfig.planningStart}
+            planningDays={appConfig.planningDays}
+          />
+          <SchedulingSummary families={familias} />
+        </div>
+      </div>
+    </>
+  );
+
+  const renderOperacion = () => (
+    <>
+      <div style={panelHintStyle}>
+        <div style={{ fontSize: '0.78rem', letterSpacing: '0.18em', color: '#64748b', textTransform: 'uppercase' }}>
+          Operación
+        </div>
+        <div style={{ marginTop: '0.35rem', fontSize: '0.95rem', color: '#334155' }}>
+          Centro del proyecto. Desde aquí se edita la operación diaria que alimenta luego balance, planificación y KPI.
+        </div>
+      </div>
+
+      <OperationsEditor
+        entities={entities}
+        familias={familias}
+        especies={especies}
+        dates={dates}
+        data={data}
+        setData={setData}
+        temporadaId={temporadaId}
+        curadoHoursConfig={curadoHoursConfig}
+      />
+    </>
+  );
+
+  const renderCalendario = () => (
+    <>
+      <div style={panelHintStyle}>
+        <div style={{ fontSize: '0.78rem', letterSpacing: '0.18em', color: '#64748b', textTransform: 'uppercase' }}>
+          Calendario
+        </div>
+        <div style={{ marginTop: '0.35rem', fontSize: '0.95rem', color: '#334155' }}>
+          Capa de planificación semanal. Aquí bajamos la operación ya definida a turnos y bloques de trabajo.
+        </div>
+      </div>
+
+      <TurnoDefinitionEditor
+        turnosDefinicion={turnosDefinicion}
+        setTurnosDefinicion={setTurnosDefinicion}
+      />
+
+      <RestrictionTypeEditor
+        tiposRestriccion={tiposRestriccion}
+        setTiposRestriccion={setTiposRestriccion}
+      />
+
+      <WeeklyScheduleEditor
+        turnosDefinicion={turnosDefinicion}
+        entities={entities}
+        tiposRestriccion={tiposRestriccion}
+      />
+    </>
+  );
+
+  const renderConfiguracion = () => (
+    <>
+      <div style={panelHintStyle}>
+        <div style={{ fontSize: '0.78rem', letterSpacing: '0.18em', color: '#64748b', textTransform: 'uppercase' }}>
+          Configuración
+        </div>
+        <div style={{ marginTop: '0.35rem', fontSize: '0.95rem', color: '#334155' }}>
+          Ajustes base del sistema: especies, familias, feriados, parámetros generales y horas de curado.
+        </div>
+      </div>
+
+      <ConfigEditor
+        entities={entities}
+        setEntities={setEntities}
+        defaultParameters={defaultParameters}
+        setDefaultParameters={setDefaultParameters}
+        familias={familias}
+        setFamilias={setFamilias}
+        especies={especies}
+        setEspecies={setEspecies}
+        parametrosEspecie={parametrosEspecie}
+        setParametrosEspecie={setParametrosEspecie}
+        holidays={holidays}
+        setHolidays={setHolidays}
+        curadoHoursConfig={curadoHoursConfig}
+        setCuradoHoursConfig={setCuradoHoursConfig}
+      />
+    </>
+  );
+
+  const renderActiveView = () => {
+    switch (activeView) {
+      case 'dashboard':
+        return renderDashboard();
+      case 'operacion':
+        return renderOperacion();
+      case 'calendario':
+        return renderCalendario();
+      case 'configuracion':
+        return renderConfiguracion();
+      default:
+        return renderOperacion();
+    }
+  };
+
   return (
     <AppShell
       title="Balance operacional moderno"
-      subtitle="Refactor base con Vite, módulos por dominio, configuración por entorno y fallback desacoplado."
+      subtitle="Base organizada por módulos."
+      navSections={navSections}
+      activeView={activeView}
+      onChangeView={setActiveView}
     >
       <StatusBanner source={source} error={error} />
 
       {status === 'loading' ? <div className="panel">Cargando información inicial…</div> : null}
 
-      {status === 'ready' ? (
-        <>
-          <DashboardOverview entities={entities} metrics={metrics} />
-
-          <ConfigEditor
-            entities={entities}
-            setEntities={setEntities}
-            defaultParameters={defaultParameters}
-            setDefaultParameters={setDefaultParameters}
-            familias={familias}
-            setFamilias={setFamilias}
-            especies={especies}
-            setEspecies={setEspecies}
-            parametrosEspecie={parametrosEspecie}
-            setParametrosEspecie={setParametrosEspecie}
-            holidays={holidays}
-            setHolidays={setHolidays}
-            curadoHoursConfig={curadoHoursConfig}
-            setCuradoHoursConfig={setCuradoHoursConfig}
-          />
-
-          <TurnoDefinitionEditor
-            turnosDefinicion={turnosDefinicion}
-            setTurnosDefinicion={setTurnosDefinicion}
-          />
-
-          <RestrictionTypeEditor
-            tiposRestriccion={tiposRestriccion}
-            setTiposRestriccion={setTiposRestriccion}
-          />
-
-          <WeeklyScheduleEditor
-            turnosDefinicion={turnosDefinicion}
-            entities={entities}
-            tiposRestriccion={tiposRestriccion}
-          />
-
-          <OperationsEditor
-            entities={entities}
-            familias={familias}
-            especies={especies}
-            dates={dates}
-            data={data}
-            setData={setData}
-            temporadaId={temporadaId}
-            curadoHoursConfig={curadoHoursConfig}
-          />
-
-          <div className="layout-grid">
-            <ProjectionPanel entities={entities} metrics={metrics} />
-            <div className="sidebar-stack">
-              <ConfigSummary
-                apiBaseUrl={appConfig.apiBaseUrl}
-                planningStart={appConfig.planningStart}
-                planningDays={appConfig.planningDays}
-              />
-              <SchedulingSummary families={familias} />
-            </div>
-          </div>
-        </>
-      ) : null}
+      {status === 'ready' ? renderActiveView() : null}
     </AppShell>
   );
 };
