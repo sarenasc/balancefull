@@ -81,29 +81,6 @@ export const WeeklyScheduleEditor = ({
     [entities],
   );
 
-  useEffect(() => {
-    const loadWeek = async () => {
-      try {
-        setError(null);
-        const rows = await requestJson(`/turnos?semana=${semana}&anio=${anio}`);
-        setRowsFromDb(rows);
-
-        const nextAssignments = {};
-        rows.forEach((row) => {
-          const key = `${row.fecha}_${normalizeHora(row.hora_inicio)}`;
-          nextAssignments[key] = String(row.exportadora_id);
-        });
-        setAssignments(nextAssignments);
-      } catch (loadError) {
-        setRowsFromDb([]);
-        setAssignments({});
-        setError(loadError.message);
-      }
-    };
-
-    loadWeek();
-  }, [semana, anio]);
-
   const orderedTurnos = useMemo(
     () =>
       [...turnosDefinicion].sort(
@@ -111,6 +88,33 @@ export const WeeklyScheduleEditor = ({
       ),
     [turnosDefinicion],
   );
+
+  const loadWeek = async () => {
+    const rows = await requestJson(`/turnos?semana=${semana}&anio=${anio}`);
+    setRowsFromDb(rows);
+
+    const nextAssignments = {};
+    rows.forEach((row) => {
+      const key = `${row.fecha}_${normalizeHora(row.hora_inicio)}`;
+      nextAssignments[key] = String(row.exportadora_id);
+    });
+    setAssignments(nextAssignments);
+  };
+
+  useEffect(() => {
+    const run = async () => {
+      try {
+        setError(null);
+        await loadWeek();
+      } catch (loadError) {
+        setRowsFromDb([]);
+        setAssignments({});
+        setError(loadError.message);
+      }
+    };
+
+    run();
+  }, [semana, anio]);
 
   const handleChangeAssignment = (fecha, hora, exportadoraId) => {
     const key = `${fecha}_${hora}`;
@@ -132,7 +136,6 @@ export const WeeklyScheduleEditor = ({
         dbMap[key] = row;
       });
 
-      const currentKeys = new Set(Object.keys(assignments));
       const dbKeys = new Set(Object.keys(dbMap));
 
       for (const key of dbKeys) {
@@ -164,19 +167,36 @@ export const WeeklyScheduleEditor = ({
         }
       }
 
-      const rows = await requestJson(`/turnos?semana=${semana}&anio=${anio}`);
-      setRowsFromDb(rows);
-
-      const nextAssignments = {};
-      rows.forEach((row) => {
-        const key = `${row.fecha}_${normalizeHora(row.hora_inicio)}`;
-        nextAssignments[key] = String(row.exportadora_id);
-      });
-      setAssignments(nextAssignments);
-
+      await loadWeek();
       setSuccess('Calendario semanal guardado correctamente.');
     } catch (saveError) {
       setError(saveError.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const clearWeek = async () => {
+    if (!window.confirm(`¿Limpiar completamente la semana ${semana} del año ${anio}?`)) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError(null);
+      setSuccess(null);
+
+      for (const row of rowsFromDb) {
+        await requestJson(`/turnos/${row.id}`, {
+          method: 'DELETE',
+        });
+      }
+
+      setRowsFromDb([]);
+      setAssignments({});
+      setSuccess(`Semana ${semana}/${anio} limpiada correctamente.`);
+    } catch (clearError) {
+      setError(clearError.message);
     } finally {
       setSaving(false);
     }
@@ -196,7 +216,7 @@ export const WeeklyScheduleEditor = ({
 
       <div
         className="panel panel--compact"
-        style={{ marginBottom: '1rem', display: 'grid', gridTemplateColumns: '180px 180px auto', gap: '1rem', alignItems: 'end' }}
+        style={{ marginBottom: '1rem', display: 'grid', gridTemplateColumns: '180px 180px auto auto', gap: '1rem', alignItems: 'end' }}
       >
         <label>
           <div className="stat-label">Semana</div>
@@ -233,6 +253,21 @@ export const WeeklyScheduleEditor = ({
           }}
         >
           {saving ? 'Guardando...' : 'Guardar calendario'}
+        </button>
+
+        <button
+          disabled={saving}
+          onClick={clearWeek}
+          style={{
+            padding: '0.75rem 1rem',
+            borderRadius: '12px',
+            border: '1px solid #dc2626',
+            background: '#fff',
+            color: '#dc2626',
+            cursor: 'pointer',
+          }}
+        >
+          Limpiar semana
         </button>
       </div>
 
