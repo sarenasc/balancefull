@@ -116,6 +116,15 @@ const eraseCardStyle = {
   borderStyle: 'dashed',
 };
 
+const actionButtonStyle = {
+  padding: '0.65rem 0.95rem',
+  borderRadius: '10px',
+  border: '1px solid #cbd5e1',
+  background: '#fff',
+  cursor: 'pointer',
+  fontWeight: 600,
+};
+
 const getEntityLabel = (entity) =>
   entity?.label || entity?.exportadora || entity?.nombre || `Exportadora ${entity?.id}`;
 
@@ -127,6 +136,20 @@ const getToolLabel = (tool) => {
   if (tool.type === 'erase-restriction') return 'Borrar restricciones';
   return 'Ninguno';
 };
+
+const loadHtml2Canvas = () =>
+  new Promise((resolve, reject) => {
+    if (window.html2canvas) {
+      resolve(window.html2canvas);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+    script.onload = () => resolve(window.html2canvas);
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
 
 export const WeeklyScheduleEditor = ({
   turnosDefinicion,
@@ -142,7 +165,9 @@ export const WeeklyScheduleEditor = ({
   const [restricciones, setRestricciones] = useState({});
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState(null);
+  const [viewTurno, setViewTurno] = useState('all');
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [dragItem, setDragItem] = useState(null);
@@ -221,6 +246,11 @@ export const WeeklyScheduleEditor = ({
       .filter((turno) => turno.slots.length > 0);
   }, [orderedTurnos, timeSlots]);
 
+  const visibleTurnoGroups = useMemo(() => {
+    if (viewTurno === 'all') return groupedSlots;
+    return groupedSlots.filter((turno) => String(turno.id) === String(viewTurno));
+  }, [groupedSlots, viewTurno]);
+
   const hydrateWeek = useCallback((rows, restrictionRows) => {
     setRowsFromDb(rows);
     setRestrictionRowsFromDb(restrictionRows);
@@ -250,9 +280,7 @@ export const WeeklyScheduleEditor = ({
   const loadWeek = useCallback(async (options = {}) => {
     const { silent = false } = options;
 
-    if (silent) {
-      setRefreshing(true);
-    }
+    if (silent) setRefreshing(true);
 
     try {
       const [rows, restrictionRows] = await Promise.all([
@@ -262,9 +290,7 @@ export const WeeklyScheduleEditor = ({
 
       hydrateWeek(rows, restrictionRows);
     } finally {
-      if (silent) {
-        setRefreshing(false);
-      }
+      if (silent) setRefreshing(false);
     }
   }, [semana, anio, hydrateWeek]);
 
@@ -327,8 +353,21 @@ export const WeeklyScheduleEditor = ({
     if (!tool) return;
 
     const key = `${fecha}_${hora}`;
+    const hasAssignment = Boolean(assignments[key]);
+    const hasRestriction = Boolean(restricciones[key]);
+
+    if (tool.type === 'entity' && hasRestriction) {
+      setError('No se puede asignar una exportadora en una celda restringida. Borra primero la restricción.');
+      return;
+    }
+
+    if (tool.type === 'restriction' && hasAssignment) {
+      setError('No se puede aplicar una restricción sobre una celda con exportadora. Borra primero la exportadora.');
+      return;
+    }
 
     if (tool.type === 'entity') {
+      setError(null);
       setAssignments((current) => ({
         ...current,
         [key]: String(tool.entity.id),
@@ -337,6 +376,7 @@ export const WeeklyScheduleEditor = ({
     }
 
     if (tool.type === 'restriction') {
+      setError(null);
       setRestricciones((current) => ({
         ...current,
         [key]: {
@@ -349,6 +389,7 @@ export const WeeklyScheduleEditor = ({
     }
 
     if (tool.type === 'erase-entity') {
+      setError(null);
       setAssignments((current) => {
         const next = { ...current };
         delete next[key];
@@ -358,6 +399,7 @@ export const WeeklyScheduleEditor = ({
     }
 
     if (tool.type === 'erase-restriction') {
+      setError(null);
       setRestricciones((current) => {
         const next = { ...current };
         delete next[key];
@@ -540,20 +582,76 @@ export const WeeklyScheduleEditor = ({
     }
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleExportImage = async () => {
+    try {
+      setExporting(true);
+      setError(null);
+
+      const html2canvas = await loadHtml2Canvas();
+      const target = document.getElementById('weekly-schedule-print-area');
+      if (!target) throw new Error('No se encontró el calendario para exportar.');
+
+      const canvas = await html2canvas(target, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+      });
+
+      const link = document.createElement('a');
+      link.download = `calendario-semana-${semana}-${anio}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (exportError) {
+      setError(exportError.message || 'No fue posible exportar la imagen.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <section className="panel">
-      <div className="panel-heading">
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+
+          #weekly-schedule-print-area,
+          #weekly-schedule-print-area * {
+            visibility: visible !important;
+          }
+
+          #weekly-schedule-print-area {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            background: white !important;
+            padding: 16px !important;
+          }
+
+          [data-no-print="true"] {
+            display: none !important;
+          }
+        }
+      `}</style>
+
+      <div className="panel-heading" data-no-print="true">
         <div>
           <p className="eyebrow">Turnos</p>
           <h2>Calendario semanal</h2>
         </div>
       </div>
 
-      {error ? <div className="status-banner status-banner--warn">{error}</div> : null}
-      {success ? <div className="status-banner status-banner--ok">{success}</div> : null}
+      {error ? <div className="status-banner status-banner--warn" data-no-print="true">{error}</div> : null}
+      {success ? <div className="status-banner status-banner--ok" data-no-print="true">{success}</div> : null}
 
       <div
         className="panel panel--compact"
+        data-no-print="true"
         style={{
           marginBottom: '1rem',
           display: 'grid',
@@ -627,7 +725,65 @@ export const WeeklyScheduleEditor = ({
         </button>
       </div>
 
-      <div style={{ ...compactPanelStyle, display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div
+        data-no-print="true"
+        style={{ ...compactPanelStyle, display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}
+      >
+        <div>
+          <div className="stat-label">Exportar / imprimir</div>
+          <div style={{ fontSize: '0.86rem', color: '#475569', marginTop: '0.2rem' }}>
+            Puedes imprimir la vista actual o exportarla como imagen.
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button type="button" onClick={handlePrint} style={actionButtonStyle}>
+            Imprimir
+          </button>
+          <button
+            type="button"
+            onClick={handleExportImage}
+            style={actionButtonStyle}
+            disabled={exporting}
+          >
+            {exporting ? 'Exportando…' : 'Exportar imagen'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewTurno('all')}
+            style={{
+              ...actionButtonStyle,
+              borderColor: viewTurno === 'all' ? '#2563eb' : '#cbd5e1',
+              background: viewTurno === 'all' ? '#eff6ff' : '#fff',
+              color: viewTurno === 'all' ? '#2563eb' : '#0f172a',
+            }}
+          >
+            Ver todos
+          </button>
+
+          {groupedSlots.map((turno) => (
+            <button
+              key={`view_${turno.id}`}
+              type="button"
+              onClick={() => setViewTurno(String(turno.id))}
+              style={{
+                ...actionButtonStyle,
+                borderColor: String(viewTurno) === String(turno.id) ? '#2563eb' : '#cbd5e1',
+                background: String(viewTurno) === String(turno.id) ? '#eff6ff' : '#fff',
+                color: String(viewTurno) === String(turno.id) ? '#2563eb' : '#0f172a',
+              }}
+            >
+              {turno.nombre}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div
+        data-no-print="true"
+        style={{ ...compactPanelStyle, display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}
+      >
         <div>
           <div className="stat-label">Sincronización</div>
           <div style={{ fontSize: '0.86rem', color: '#475569', marginTop: '0.2rem' }}>
@@ -642,11 +798,14 @@ export const WeeklyScheduleEditor = ({
         </div>
       </div>
 
-      <div style={{ ...compactPanelStyle, display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div
+        data-no-print="true"
+        style={{ ...compactPanelStyle, display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}
+      >
         <div>
           <div className="stat-label">Modo pintar</div>
           <div style={{ fontSize: '0.86rem', color: '#475569', marginTop: '0.2rem' }}>
-            Haz clic en una tarjeta y pinta varios bloques. Al soltar el mouse, la herramienta se desmarca sola.
+            Las restricciones ahora bloquean asignaciones y las exportadoras bloquean nuevas restricciones.
           </div>
         </div>
 
@@ -665,20 +824,14 @@ export const WeeklyScheduleEditor = ({
               setPaintTool(null);
               setIsPainting(false);
             }}
-            style={{
-              padding: '0.55rem 0.85rem',
-              borderRadius: '10px',
-              border: '1px solid #cbd5e1',
-              background: '#fff',
-              cursor: 'pointer',
-            }}
+            style={actionButtonStyle}
           >
             Limpiar herramienta
           </button>
         </div>
       </div>
 
-      <div style={{ ...compactPanelStyle }}>
+      <div style={{ ...compactPanelStyle }} data-no-print="true">
         <div className="stat-label" style={{ marginBottom: '0.75rem' }}>
           Exportadoras
         </div>
@@ -729,7 +882,7 @@ export const WeeklyScheduleEditor = ({
         </div>
       </div>
 
-      <div style={{ ...compactPanelStyle }}>
+      <div style={{ ...compactPanelStyle }} data-no-print="true">
         <div className="stat-label" style={{ marginBottom: '0.75rem' }}>
           Restricciones
         </div>
@@ -776,184 +929,200 @@ export const WeeklyScheduleEditor = ({
         </div>
       </div>
 
-      {groupedSlots.length === 0 ? (
-        <div style={compactPanelStyle}>
-          No hay turnos definidos todavía. Crea al menos un turno antes de armar el calendario semanal.
+      <div id="weekly-schedule-print-area">
+        <div style={{ marginBottom: '1rem', padding: '1rem', border: '1px solid #dbe4f0', borderRadius: '12px', background: '#fff' }}>
+          <div style={{ fontSize: '0.8rem', letterSpacing: '0.18em', color: '#64748b', textTransform: 'uppercase' }}>
+            Programa semanal
+          </div>
+          <h3 style={{ margin: '0.35rem 0 0.25rem', color: '#0f172a' }}>
+            Semana {semana} · Año {anio}
+          </h3>
+          <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+            Vista: {viewTurno === 'all' ? 'Todos los turnos' : groupedSlots.find((t) => String(t.id) === String(viewTurno))?.nombre || 'Turno'}
+          </div>
         </div>
-      ) : (
-        groupedSlots.map((turno) => (
-          <div
-            key={turno.id}
-            style={{ ...compactPanelStyle, overflowX: 'auto' }}
-          >
-            <div style={{ marginBottom: '0.75rem' }}>
-              <div className="stat-label">{turno.nombre}</div>
-              <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                {normalizeHora(turno.hora_inicio)} - {normalizeHora(turno.hora_fin)}
+
+        {visibleTurnoGroups.length === 0 ? (
+          <div style={compactPanelStyle}>
+            No hay turnos definidos todavía. Crea al menos un turno antes de armar el calendario semanal.
+          </div>
+        ) : (
+          visibleTurnoGroups.map((turno) => (
+            <div
+              key={turno.id}
+              style={{ ...compactPanelStyle, overflowX: 'auto' }}
+            >
+              <div style={{ marginBottom: '0.75rem' }}>
+                <div className="stat-label">{turno.nombre}</div>
+                <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                  {normalizeHora(turno.hora_inicio)} - {normalizeHora(turno.hora_fin)}
+                </div>
               </div>
-            </div>
 
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1250px' }}>
-              <thead>
-                <tr>
-                  <th
-                    style={{
-                      border: '1px solid #dbe4f0',
-                      background: '#f8fafc',
-                      padding: '0.6rem',
-                      textAlign: 'left',
-                      position: 'sticky',
-                      left: 0,
-                      zIndex: 2,
-                    }}
-                  >
-                    Hora
-                  </th>
-                  {dates.map((date) => (
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1250px' }}>
+                <thead>
+                  <tr>
                     <th
-                      key={date}
                       style={{
                         border: '1px solid #dbe4f0',
                         background: '#f8fafc',
                         padding: '0.6rem',
-                        minWidth: '165px',
-                      }}
-                    >
-                      <div style={{ textTransform: 'capitalize' }}>{formatDateLabel(date)}</div>
-                      <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.2rem' }}>
-                        {date}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-
-              <tbody>
-                {turno.slots.map((hora) => (
-                  <tr key={`${turno.id}_${hora}`}>
-                    <td
-                      style={{
-                        border: '1px solid #dbe4f0',
-                        background: '#f8fafc',
-                        padding: '0.6rem',
-                        fontWeight: 700,
+                        textAlign: 'left',
                         position: 'sticky',
                         left: 0,
-                        zIndex: 1,
+                        zIndex: 2,
                       }}
                     >
-                      {hora}
-                    </td>
-
-                    {dates.map((date) => {
-                      const key = `${date}_${hora}`;
-                      const assignedId = assignments[key];
-                      const assignedEntity = assignedId ? entityMap.get(String(assignedId)) : null;
-                      const selectedRestriction = restricciones[key] || null;
-
-                      return (
-                        <td
-                          key={key}
-                          onDragOver={(event) => event.preventDefault()}
-                          onDrop={() => handleDrop(date, hora)}
-                          onMouseDown={() => startPaintingCell(date, hora)}
-                          onMouseEnter={() => continuePaintingCell(date, hora)}
-                          style={{
-                            border: '1px solid #dbe4f0',
-                            padding: '0.5rem',
-                            verticalAlign: 'top',
-                            background: selectedRestriction?.color
-                              ? `${selectedRestriction.color}16`
-                              : isPainting
-                                ? '#f8fafc'
-                                : '#fff',
-                            minHeight: '86px',
-                            cursor: paintTool ? 'crosshair' : 'default',
-                          }}
-                        >
-                          <div style={{ display: 'grid', gap: '0.45rem' }}>
-                            {assignedEntity ? (
-                              <div
-                                style={{
-                                  ...chipStyle,
-                                  background: '#dbeafe',
-                                  color: '#1d4ed8',
-                                  border: '1px solid #93c5fd',
-                                  justifyContent: 'space-between',
-                                }}
-                              >
-                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {getEntityLabel(assignedEntity)}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => removeAssignment(date, hora)}
-                                  style={{
-                                    border: 'none',
-                                    background: 'transparent',
-                                    color: '#1d4ed8',
-                                    cursor: 'pointer',
-                                    fontWeight: 800,
-                                  }}
-                                >
-                                  ×
-                                </button>
-                              </div>
-                            ) : (
-                              <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                                {paintTool?.type === 'entity'
-                                  ? 'Mantén apretado y pinta bloques'
-                                  : paintTool?.type === 'erase-entity'
-                                    ? 'Pinta para borrar exportadoras'
-                                    : 'Suelta o pinta una exportadora'}
-                              </div>
-                            )}
-
-                            {selectedRestriction ? (
-                              <div
-                                style={{
-                                  ...chipStyle,
-                                  background: `${selectedRestriction.color}22`,
-                                  color: selectedRestriction.color,
-                                  border: `1px solid ${selectedRestriction.color}55`,
-                                  justifyContent: 'space-between',
-                                }}
-                              >
-                                <span>{selectedRestriction.nombre}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => removeRestriction(date, hora)}
-                                  style={{
-                                    border: 'none',
-                                    background: 'transparent',
-                                    color: selectedRestriction.color,
-                                    cursor: 'pointer',
-                                    fontWeight: 800,
-                                  }}
-                                >
-                                  ×
-                                </button>
-                              </div>
-                            ) : (
-                              <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                                {paintTool?.type === 'restriction'
-                                  ? 'Mantén apretado y pinta bloques'
-                                  : paintTool?.type === 'erase-restriction'
-                                    ? 'Pinta para borrar restricciones'
-                                    : 'Suelta o pinta una restricción'}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      );
-                    })}
+                      Hora
+                    </th>
+                    {dates.map((date) => (
+                      <th
+                        key={date}
+                        style={{
+                          border: '1px solid #dbe4f0',
+                          background: '#f8fafc',
+                          padding: '0.6rem',
+                          minWidth: '165px',
+                        }}
+                      >
+                        <div style={{ textTransform: 'capitalize' }}>{formatDateLabel(date)}</div>
+                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.2rem' }}>
+                          {date}
+                        </div>
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ))
-      )}
+                </thead>
+
+                <tbody>
+                  {turno.slots.map((hora) => (
+                    <tr key={`${turno.id}_${hora}`}>
+                      <td
+                        style={{
+                          border: '1px solid #dbe4f0',
+                          background: '#f8fafc',
+                          padding: '0.6rem',
+                          fontWeight: 700,
+                          position: 'sticky',
+                          left: 0,
+                          zIndex: 1,
+                        }}
+                      >
+                        {hora}
+                      </td>
+
+                      {dates.map((date) => {
+                        const key = `${date}_${hora}`;
+                        const assignedId = assignments[key];
+                        const assignedEntity = assignedId ? entityMap.get(String(assignedId)) : null;
+                        const selectedRestriction = restricciones[key] || null;
+
+                        return (
+                          <td
+                            key={key}
+                            onDragOver={(event) => event.preventDefault()}
+                            onDrop={() => handleDrop(date, hora)}
+                            onMouseDown={() => startPaintingCell(date, hora)}
+                            onMouseEnter={() => continuePaintingCell(date, hora)}
+                            style={{
+                              border: '1px solid #dbe4f0',
+                              padding: '0.5rem',
+                              verticalAlign: 'top',
+                              background: selectedRestriction?.color
+                                ? `${selectedRestriction.color}16`
+                                : isPainting
+                                  ? '#f8fafc'
+                                  : '#fff',
+                              minHeight: '86px',
+                              cursor: paintTool ? 'crosshair' : 'default',
+                            }}
+                          >
+                            <div style={{ display: 'grid', gap: '0.45rem' }}>
+                              {assignedEntity ? (
+                                <div
+                                  style={{
+                                    ...chipStyle,
+                                    background: '#dbeafe',
+                                    color: '#1d4ed8',
+                                    border: '1px solid #93c5fd',
+                                    justifyContent: 'space-between',
+                                  }}
+                                >
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {getEntityLabel(assignedEntity)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeAssignment(date, hora)}
+                                    style={{
+                                      border: 'none',
+                                      background: 'transparent',
+                                      color: '#1d4ed8',
+                                      cursor: 'pointer',
+                                      fontWeight: 800,
+                                    }}
+                                    data-no-print="true"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ) : (
+                                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                                  {paintTool?.type === 'entity'
+                                    ? 'Mantén apretado y pinta bloques'
+                                    : paintTool?.type === 'erase-entity'
+                                      ? 'Pinta para borrar exportadoras'
+                                      : 'Suelta o pinta una exportadora'}
+                                </div>
+                              )}
+
+                              {selectedRestriction ? (
+                                <div
+                                  style={{
+                                    ...chipStyle,
+                                    background: `${selectedRestriction.color}22`,
+                                    color: selectedRestriction.color,
+                                    border: `1px solid ${selectedRestriction.color}55`,
+                                    justifyContent: 'space-between',
+                                  }}
+                                >
+                                  <span>{selectedRestriction.nombre}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeRestriction(date, hora)}
+                                    style={{
+                                      border: 'none',
+                                      background: 'transparent',
+                                      color: selectedRestriction.color,
+                                      cursor: 'pointer',
+                                      fontWeight: 800,
+                                    }}
+                                    data-no-print="true"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ) : (
+                                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                                  {paintTool?.type === 'restriction'
+                                    ? 'Mantén apretado y pinta bloques'
+                                    : paintTool?.type === 'erase-restriction'
+                                      ? 'Pinta para borrar restricciones'
+                                      : 'Suelta o pinta una restricción'}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))
+        )}
+      </div>
     </section>
   );
 };
