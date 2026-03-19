@@ -9,6 +9,7 @@ import { ProjectionPanel } from '../features/projection/ProjectionPanel';
 import { createProjectionMetrics } from '../features/projection/projectionModel';
 import { SchedulingSummary } from '../features/scheduling/SchedulingSummary';
 import { TurnoDefinitionEditor } from '../features/scheduling/TurnoDefinitionEditor';
+import { WeeklyScheduleEditor } from '../features/scheduling/WeeklyScheduleEditor';
 import { OperationsEditor } from '../features/operations/OperationsEditor';
 import { usePlannerData } from '../hooks/usePlannerData';
 
@@ -193,6 +194,11 @@ export const App = () => {
           <TurnoDefinitionEditor
             turnosDefinicion={turnosDefinicion}
             setTurnosDefinicion={setTurnosDefinicion}
+          />
+
+          <WeeklyScheduleEditor
+            turnosDefinicion={turnosDefinicion}
+            entities={entities}
           />
 
           <OperationsEditor
