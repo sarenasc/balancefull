@@ -221,6 +221,7 @@ export const App = () => {
           <WeeklyScheduleEditor
             turnosDefinicion={turnosDefinicion}
             entities={entities}
+            tiposRestriccion={tiposRestriccion}
           />
 
           <OperationsEditor

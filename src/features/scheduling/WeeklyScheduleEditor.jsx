@@ -64,17 +64,24 @@ const requestJson = async (path, options = {}) => {
 export const WeeklyScheduleEditor = ({
   turnosDefinicion,
   entities,
+  tiposRestriccion,
 }) => {
   const now = new Date();
   const [semana, setSemana] = useState(getWeekNumber(now));
   const [anio, setAnio] = useState(now.getFullYear());
   const [rowsFromDb, setRowsFromDb] = useState([]);
   const [assignments, setAssignments] = useState({});
+  const [restricciones, setRestricciones] = useState({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
   const dates = useMemo(() => getDatesForWeek(semana, anio), [semana, anio]);
+
+  const storageKey = useMemo(
+    () => `balancefull_restricciones_${anio}_${semana}`,
+    [anio, semana],
+  );
 
   const visibleEntities = useMemo(
     () => entities.filter((entity) => Number(entity.visibleLinea ?? 1) === 1),
@@ -116,11 +123,53 @@ export const WeeklyScheduleEditor = ({
     run();
   }, [semana, anio]);
 
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      setRestricciones(saved ? JSON.parse(saved) : {});
+    } catch (_error) {
+      setRestricciones({});
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(restricciones));
+    } catch (_error) {
+      // noop
+    }
+  }, [restricciones, storageKey]);
+
   const handleChangeAssignment = (fecha, hora, exportadoraId) => {
     const key = `${fecha}_${hora}`;
     setAssignments((current) => ({
       ...current,
       [key]: exportadoraId,
+    }));
+  };
+
+  const handleChangeRestriction = (fecha, hora, tipoId) => {
+    const key = `${fecha}_${hora}`;
+
+    if (!tipoId) {
+      setRestricciones((current) => {
+        const copy = { ...current };
+        delete copy[key];
+        return copy;
+      });
+      return;
+    }
+
+    const tipo = tiposRestriccion.find((item) => String(item.id) === String(tipoId));
+    if (!tipo) return;
+
+    setRestricciones((current) => ({
+      ...current,
+      [key]: {
+        id: tipo.id,
+        nombre: tipo.nombre,
+        color: tipo.color,
+      },
     }));
   };
 
@@ -168,7 +217,7 @@ export const WeeklyScheduleEditor = ({
       }
 
       await loadWeek();
-      setSuccess('Calendario semanal guardado correctamente.');
+      setSuccess('Calendario semanal guardado correctamente. Las restricciones visuales quedan guardadas localmente.');
     } catch (saveError) {
       setError(saveError.message);
     } finally {
@@ -194,6 +243,8 @@ export const WeeklyScheduleEditor = ({
 
       setRowsFromDb([]);
       setAssignments({});
+      setRestricciones({});
+      localStorage.removeItem(storageKey);
       setSuccess(`Semana ${semana}/${anio} limpiada correctamente.`);
     } catch (clearError) {
       setError(clearError.message);
@@ -271,6 +322,37 @@ export const WeeklyScheduleEditor = ({
         </button>
       </div>
 
+      {tiposRestriccion.length ? (
+        <div className="panel panel--compact" style={{ marginBottom: '1rem' }}>
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Restricciones visuales</p>
+              <h2>Tipos disponibles</h2>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+            {tiposRestriccion.map((tipo) => (
+              <span
+                key={tipo.id}
+                style={{
+                  display: 'inline-block',
+                  padding: '0.35rem 0.75rem',
+                  borderRadius: '999px',
+                  border: `1px solid ${tipo.color}`,
+                  color: tipo.color,
+                  background: `${tipo.color}22`,
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                }}
+              >
+                {tipo.nombre}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div className="table-wrap">
         <table>
           <thead>
@@ -297,30 +379,80 @@ export const WeeklyScheduleEditor = ({
                   {dates.map((date) => {
                     const key = `${date}_${hora}`;
                     const selected = assignments[key] || '';
+                    const restriccion = restricciones[key];
 
                     return (
-                      <td key={key}>
-                        <select
-                          value={selected}
-                          onChange={(event) =>
-                            handleChangeAssignment(date, hora, event.target.value)
-                          }
-                          style={{
-                            width: '100%',
-                            minWidth: '160px',
-                            padding: '0.6rem',
-                            borderRadius: '10px',
-                            border: '1px solid #cbd5e1',
-                            background: '#fff',
-                          }}
-                        >
-                          <option value="">Sin asignar</option>
-                          {visibleEntities.map((entity) => (
-                            <option key={entity.id} value={entity.id}>
-                              {entity.label}
-                            </option>
-                          ))}
-                        </select>
+                      <td
+                        key={key}
+                        style={{
+                          background: restriccion ? `${restriccion.color}14` : 'transparent',
+                          borderLeft: restriccion ? `4px solid ${restriccion.color}` : undefined,
+                        }}
+                      >
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          <select
+                            value={selected}
+                            onChange={(event) =>
+                              handleChangeAssignment(date, hora, event.target.value)
+                            }
+                            style={{
+                              width: '100%',
+                              minWidth: '160px',
+                              padding: '0.6rem',
+                              borderRadius: '10px',
+                              border: '1px solid #cbd5e1',
+                              background: '#fff',
+                            }}
+                          >
+                            <option value="">Sin asignar</option>
+                            {visibleEntities.map((entity) => (
+                              <option key={entity.id} value={entity.id}>
+                                {entity.label}
+                              </option>
+                            ))}
+                          </select>
+
+                          <select
+                            value={restriccion?.id || ''}
+                            onChange={(event) =>
+                              handleChangeRestriction(date, hora, event.target.value)
+                            }
+                            style={{
+                              width: '100%',
+                              minWidth: '160px',
+                              padding: '0.5rem',
+                              borderRadius: '10px',
+                              border: '1px solid #cbd5e1',
+                              background: '#fff',
+                              fontSize: '0.85rem',
+                            }}
+                          >
+                            <option value="">Sin restricción</option>
+                            {tiposRestriccion.map((tipo) => (
+                              <option key={tipo.id} value={tipo.id}>
+                                {tipo.nombre}
+                              </option>
+                            ))}
+                          </select>
+
+                          {restriccion ? (
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                padding: '0.25rem 0.65rem',
+                                borderRadius: '999px',
+                                border: `1px solid ${restriccion.color}`,
+                                color: restriccion.color,
+                                background: `${restriccion.color}22`,
+                                fontWeight: 700,
+                                fontSize: '0.78rem',
+                                width: 'fit-content',
+                              }}
+                            >
+                              {restriccion.nombre}
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
                     );
                   })}
