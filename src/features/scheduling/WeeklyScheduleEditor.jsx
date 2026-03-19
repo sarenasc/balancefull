@@ -165,8 +165,11 @@ export const WeeklyScheduleEditor = ({
   tiposRestriccion,
 }) => {
   const now = new Date();
-  const [semana, setSemana] = useState(getWeekNumber(now));
-  const [anio, setAnio] = useState(now.getFullYear());
+  const currentWeek = getWeekNumber(now);
+  const currentYear = now.getFullYear();
+
+  const [semana, setSemana] = useState(currentWeek);
+  const [anio, setAnio] = useState(currentYear);
   const [rowsFromDb, setRowsFromDb] = useState([]);
   const [restrictionRowsFromDb, setRestrictionRowsFromDb] = useState([]);
   const [assignments, setAssignments] = useState({});
@@ -180,6 +183,8 @@ export const WeeklyScheduleEditor = ({
   const [copySourceDate, setCopySourceDate] = useState('');
   const [copyTargetDate, setCopyTargetDate] = useState('');
   const [copyTurnoId, setCopyTurnoId] = useState('');
+  const [copyWeekSource, setCopyWeekSource] = useState(currentWeek > 1 ? currentWeek - 1 : currentWeek);
+  const [copyWeekYear, setCopyWeekYear] = useState(currentYear);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [dragItem, setDragItem] = useState(null);
@@ -627,6 +632,70 @@ export const WeeklyScheduleEditor = ({
     setDirty(true);
   };
 
+  const handleCopyFullWeek = async () => {
+    try {
+      if (Number(copyWeekSource) === Number(semana) && Number(copyWeekYear) === Number(anio)) {
+        setError('La semana origen no puede ser la misma semana destino.');
+        return;
+      }
+
+      if (!window.confirm(`¿Copiar semana ${copyWeekSource}/${copyWeekYear} sobre la semana ${semana}/${anio}?`)) {
+        return;
+      }
+
+      setError(null);
+      setSuccess(null);
+      setRefreshing(true);
+
+      const [sourceRows, sourceRestrictions] = await Promise.all([
+        requestJson(`/turnos?semana=${copyWeekSource}&anio=${copyWeekYear}`),
+        requestJson(`/turnos-restricciones?semana=${copyWeekSource}&anio=${copyWeekYear}`),
+      ]);
+
+      const sourceDates = getDatesForWeek(Number(copyWeekSource), Number(copyWeekYear));
+      const targetDates = getDatesForWeek(Number(semana), Number(anio));
+
+      const nextAssignments = { ...assignments };
+      const nextRestrictions = { ...restricciones };
+
+      targetDates.forEach((targetDate) => {
+        timeSlots.forEach((hora) => {
+          delete nextAssignments[`${targetDate}_${hora}`];
+          delete nextRestrictions[`${targetDate}_${hora}`];
+        });
+      });
+
+      sourceRows.forEach((row) => {
+        const sourceIndex = sourceDates.indexOf(row.fecha);
+        if (sourceIndex < 0 || !targetDates[sourceIndex]) return;
+        const targetDate = targetDates[sourceIndex];
+        const hora = normalizeHora(row.hora_inicio);
+        nextAssignments[`${targetDate}_${hora}`] = String(row.exportadora_id);
+      });
+
+      sourceRestrictions.forEach((row) => {
+        const sourceIndex = sourceDates.indexOf(row.fecha);
+        if (sourceIndex < 0 || !targetDates[sourceIndex]) return;
+        const targetDate = targetDates[sourceIndex];
+        const hora = normalizeHora(row.hora_inicio);
+        nextRestrictions[`${targetDate}_${hora}`] = {
+          id: row.tipo_restriccion_id,
+          nombre: row.nombre,
+          color: row.color,
+        };
+      });
+
+      setAssignments(nextAssignments);
+      setRestricciones(nextRestrictions);
+      setDirty(true);
+      setSuccess(`Semana ${copyWeekSource}/${copyWeekYear} copiada correctamente sobre la semana actual.`);
+    } catch (copyError) {
+      setError(copyError.message);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const clearWeek = async () => {
     if (!window.confirm(`¿Limpiar completamente la semana ${semana} del año ${anio}?`)) {
       return;
@@ -803,6 +872,42 @@ export const WeeklyScheduleEditor = ({
           }}
         >
           Limpiar semana
+        </button>
+      </div>
+
+      <div
+        data-no-print="true"
+        style={{ ...compactPanelStyle, display: 'grid', gridTemplateColumns: '1fr 180px 180px auto', gap: '0.8rem', alignItems: 'end' }}
+      >
+        <div style={{ fontSize: '0.86rem', color: '#475569' }}>
+          <div className="stat-label" style={{ marginBottom: '0.35rem' }}>Copiar semana completa</div>
+          Duplica exportadoras y restricciones de una semana origen sobre la semana actual.
+        </div>
+
+        <label>
+          <div className="stat-label">Semana origen</div>
+          <input
+            type="number"
+            min="1"
+            max="53"
+            value={copyWeekSource}
+            onChange={(event) => setCopyWeekSource(Number(event.target.value || 1))}
+            style={selectStyle}
+          />
+        </label>
+
+        <label>
+          <div className="stat-label">Año origen</div>
+          <input
+            type="number"
+            value={copyWeekYear}
+            onChange={(event) => setCopyWeekYear(Number(event.target.value || new Date().getFullYear()))}
+            style={selectStyle}
+          />
+        </label>
+
+        <button type="button" onClick={handleCopyFullWeek} style={{ ...actionButtonStyle, height: '44px' }}>
+          Copiar semana
         </button>
       </div>
 
