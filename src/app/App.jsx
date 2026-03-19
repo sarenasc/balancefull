@@ -10,6 +10,7 @@ import { createProjectionMetrics } from '../features/projection/projectionModel'
 import { SchedulingSummary } from '../features/scheduling/SchedulingSummary';
 import { TurnoDefinitionEditor } from '../features/scheduling/TurnoDefinitionEditor';
 import { WeeklyScheduleEditor } from '../features/scheduling/WeeklyScheduleEditor';
+import { RestrictionTypeEditor } from '../features/scheduling/RestrictionTypeEditor';
 import { OperationsEditor } from '../features/operations/OperationsEditor';
 import { usePlannerData } from '../hooks/usePlannerData';
 
@@ -36,6 +37,7 @@ export const App = () => {
   const [holidays, setHolidays] = useState([]);
   const [curadoHoursConfig, setCuradoHoursConfig] = useState({});
   const [turnosDefinicion, setTurnosDefinicion] = useState([]);
+  const [tiposRestriccion, setTiposRestriccion] = useState([]);
   const [data, setData] = useState({});
   const [defaultParameters, setDefaultParameters] = useState({
     especie_id: null,
@@ -119,6 +121,21 @@ export const App = () => {
     loadTurnosDefinicion();
   }, []);
 
+  useEffect(() => {
+    const loadTiposRestriccion = async () => {
+      try {
+        const response = await fetch(`${appConfig.apiBaseUrl}/tipos-restriccion`);
+        if (!response.ok) throw new Error('No fue posible cargar restricciones');
+        const rows = await response.json();
+        setTiposRestriccion(rows);
+      } catch (_error) {
+        setTiposRestriccion([]);
+      }
+    };
+
+    loadTiposRestriccion();
+  }, []);
+
   const familyBySpeciesId = useMemo(() => {
     const familyMap = new Map(familias.map((family) => [Number(family.id), family]));
     return new Map(
@@ -194,6 +211,11 @@ export const App = () => {
           <TurnoDefinitionEditor
             turnosDefinicion={turnosDefinicion}
             setTurnosDefinicion={setTurnosDefinicion}
+          />
+
+          <RestrictionTypeEditor
+            tiposRestriccion={tiposRestriccion}
+            setTiposRestriccion={setTiposRestriccion}
           />
 
           <WeeklyScheduleEditor
