@@ -141,6 +141,8 @@ export const WeeklyScheduleEditor = ({
   const [assignments, setAssignments] = useState({});
   const [restricciones, setRestricciones] = useState({});
   const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastSyncAt, setLastSyncAt] = useState(null);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [dragItem, setDragItem] = useState(null);
@@ -219,12 +221,7 @@ export const WeeklyScheduleEditor = ({
       .filter((turno) => turno.slots.length > 0);
   }, [orderedTurnos, timeSlots]);
 
-  const loadWeek = useCallback(async () => {
-    const [rows, restrictionRows] = await Promise.all([
-      requestJson(`/turnos?semana=${semana}&anio=${anio}`),
-      requestJson(`/turnos-restricciones?semana=${semana}&anio=${anio}`),
-    ]);
-
+  const hydrateWeek = useCallback((rows, restrictionRows) => {
     setRowsFromDb(rows);
     setRestrictionRowsFromDb(restrictionRows);
 
@@ -247,7 +244,29 @@ export const WeeklyScheduleEditor = ({
     });
     setRestricciones(nextRestrictions);
     setDirty(false);
-  }, [semana, anio]);
+    setLastSyncAt(new Date());
+  }, []);
+
+  const loadWeek = useCallback(async (options = {}) => {
+    const { silent = false } = options;
+
+    if (silent) {
+      setRefreshing(true);
+    }
+
+    try {
+      const [rows, restrictionRows] = await Promise.all([
+        requestJson(`/turnos?semana=${semana}&anio=${anio}`),
+        requestJson(`/turnos-restricciones?semana=${semana}&anio=${anio}`),
+      ]);
+
+      hydrateWeek(rows, restrictionRows);
+    } finally {
+      if (silent) {
+        setRefreshing(false);
+      }
+    }
+  }, [semana, anio, hydrateWeek]);
 
   useEffect(() => {
     const run = async () => {
@@ -278,6 +297,26 @@ export const WeeklyScheduleEditor = ({
     window.addEventListener('mouseup', handleMouseUp);
     return () => window.removeEventListener('mouseup', handleMouseUp);
   }, [isPainting]);
+
+  useEffect(() => {
+    if (dirty || saving || isPainting) return;
+
+    const timer = window.setInterval(() => {
+      loadWeek({ silent: true }).catch(() => {});
+    }, 15000);
+
+    return () => window.clearInterval(timer);
+  }, [dirty, saving, isPainting, loadWeek]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      if (dirty || saving || isPainting) return;
+      loadWeek({ silent: true }).catch(() => {});
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [dirty, saving, isPainting, loadWeek]);
 
   const markDirty = () => {
     setDirty(true);
@@ -408,7 +447,7 @@ export const WeeklyScheduleEditor = ({
         }
       }
 
-      await loadWeek();
+      await loadWeek({ silent: true });
       if (silent) {
         setSuccess('Cambios guardados automáticamente.');
       } else {
@@ -492,6 +531,7 @@ export const WeeklyScheduleEditor = ({
       setAssignments({});
       setRestricciones({});
       setDirty(false);
+      setLastSyncAt(new Date());
       setSuccess(`Semana ${semana}/${anio} limpiada correctamente.`);
     } catch (clearError) {
       setError(clearError.message);
@@ -585,6 +625,21 @@ export const WeeklyScheduleEditor = ({
         >
           Limpiar semana
         </button>
+      </div>
+
+      <div style={{ ...compactPanelStyle, display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div>
+          <div className="stat-label">Sincronización</div>
+          <div style={{ fontSize: '0.86rem', color: '#475569', marginTop: '0.2rem' }}>
+            Se refresca sola cada 15 segundos y también al volver a la pestaña.
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ fontSize: '0.82rem', color: '#64748b' }}>
+            {refreshing ? 'Sincronizando…' : lastSyncAt ? `Última sync: ${lastSyncAt.toLocaleTimeString('es-CL')}` : 'Sin sincronización aún'}
+          </div>
+        </div>
       </div>
 
       <div style={{ ...compactPanelStyle, display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
