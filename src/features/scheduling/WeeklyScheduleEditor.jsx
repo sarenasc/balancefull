@@ -22,6 +22,7 @@ const getDatesForWeek = (week, year) => {
   const simple = new Date(Date.UTC(year, 0, 1 + (week - 1) * 7));
   const dow = simple.getUTCDay();
   const monday = new Date(simple);
+
   if (dow <= 4) {
     monday.setUTCDate(simple.getUTCDate() - simple.getUTCDay() + 1);
   } else {
@@ -44,6 +45,21 @@ const normalizeHora = (value) => {
   return raw.substring(0, 5);
 };
 
+const toMinutes = (value) => {
+  const hora = normalizeHora(value);
+  if (!hora) return null;
+  const [h, m] = hora.split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  return h * 60 + m;
+};
+
+const toHora = (minutes) => {
+  const safe = ((minutes % 1440) + 1440) % 1440;
+  const h = Math.floor(safe / 60);
+  const m = safe % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+};
+
 const requestJson = async (path, options = {}) => {
   const response = await fetch(`${apiUrl}${path}`, {
     headers: {
@@ -61,6 +77,41 @@ const requestJson = async (path, options = {}) => {
   return response.json().catch(() => ({}));
 };
 
+const cardStyle = {
+  border: '1px solid #dbe4f0',
+  borderRadius: '12px',
+  background: '#fff',
+};
+
+const compactPanelStyle = {
+  ...cardStyle,
+  padding: '1rem',
+  marginBottom: '1rem',
+};
+
+const chipStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.4rem',
+  padding: '0.28rem 0.55rem',
+  borderRadius: '999px',
+  fontSize: '0.75rem',
+  fontWeight: 700,
+  whiteSpace: 'nowrap',
+};
+
+const dragCardStyle = {
+  padding: '0.65rem 0.8rem',
+  borderRadius: '12px',
+  cursor: 'grab',
+  border: '1px solid #cbd5e1',
+  background: '#fff',
+  boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
+};
+
+const getEntityLabel = (entity) =>
+  entity?.label || entity?.exportadora || entity?.nombre || `Exportadora ${entity?.id}`;
+
 export const WeeklyScheduleEditor = ({
   turnosDefinicion,
   entities,
@@ -70,22 +121,24 @@ export const WeeklyScheduleEditor = ({
   const [semana, setSemana] = useState(getWeekNumber(now));
   const [anio, setAnio] = useState(now.getFullYear());
   const [rowsFromDb, setRowsFromDb] = useState([]);
+  const [restrictionRowsFromDb, setRestrictionRowsFromDb] = useState([]);
   const [assignments, setAssignments] = useState({});
   const [restricciones, setRestricciones] = useState({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [dragItem, setDragItem] = useState(null);
 
   const dates = useMemo(() => getDatesForWeek(semana, anio), [semana, anio]);
-
-  const storageKey = useMemo(
-    () => `balancefull_restricciones_${anio}_${semana}`,
-    [anio, semana],
-  );
 
   const visibleEntities = useMemo(
     () => entities.filter((entity) => Number(entity.visibleLinea ?? 1) === 1),
     [entities],
+  );
+
+  const entityMap = useMemo(
+    () => new Map(visibleEntities.map((entity) => [String(entity.id), entity])),
+    [visibleEntities],
   );
 
   const orderedTurnos = useMemo(
@@ -96,9 +149,65 @@ export const WeeklyScheduleEditor = ({
     [turnosDefinicion],
   );
 
+  const timeSlots = useMemo(() => {
+    if (orderedTurnos.length === 0) return [];
+
+    let minStart = null;
+    let maxEnd = null;
+
+    orderedTurnos.forEach((turno) => {
+      const start = toMinutes(turno.hora_inicio);
+      let end = toMinutes(turno.hora_fin);
+
+      if (start == null || end == null) return;
+      if (end <= start) end += 1440;
+
+      if (minStart == null || start < minStart) minStart = start;
+      if (maxEnd == null || end > maxEnd) maxEnd = end;
+    });
+
+    if (minStart == null || maxEnd == null) return [];
+
+    const slots = [];
+    for (let current = minStart; current < maxEnd; current += 30) {
+      slots.push(toHora(current));
+    }
+
+    return slots;
+  }, [orderedTurnos]);
+
+  const groupedSlots = useMemo(() => {
+    return orderedTurnos
+      .map((turno) => {
+        const start = toMinutes(turno.hora_inicio);
+        let end = toMinutes(turno.hora_fin);
+
+        if (start == null || end == null) {
+          return { ...turno, slots: [] };
+        }
+
+        if (end <= start) end += 1440;
+
+        const slots = timeSlots.filter((slot) => {
+          let value = toMinutes(slot);
+          if (value == null) return false;
+          if (value < start) value += 1440;
+          return value >= start && value < end;
+        });
+
+        return { ...turno, slots };
+      })
+      .filter((turno) => turno.slots.length > 0);
+  }, [orderedTurnos, timeSlots]);
+
   const loadWeek = async () => {
-    const rows = await requestJson(`/turnos?semana=${semana}&anio=${anio}`);
+    const [rows, restrictionRows] = await Promise.all([
+      requestJson(`/turnos?semana=${semana}&anio=${anio}`),
+      requestJson(`/turnos-restricciones?semana=${semana}&anio=${anio}`),
+    ]);
+
     setRowsFromDb(rows);
+    setRestrictionRowsFromDb(restrictionRows);
 
     const nextAssignments = {};
     rows.forEach((row) => {
@@ -106,16 +215,31 @@ export const WeeklyScheduleEditor = ({
       nextAssignments[key] = String(row.exportadora_id);
     });
     setAssignments(nextAssignments);
+
+    const nextRestrictions = {};
+    restrictionRows.forEach((row) => {
+      const key = `${row.fecha}_${normalizeHora(row.hora_inicio)}`;
+      nextRestrictions[key] = {
+        id: row.tipo_restriccion_id,
+        nombre: row.nombre,
+        color: row.color,
+        dbId: row.id,
+      };
+    });
+    setRestricciones(nextRestrictions);
   };
 
   useEffect(() => {
     const run = async () => {
       try {
         setError(null);
+        setSuccess(null);
         await loadWeek();
       } catch (loadError) {
         setRowsFromDb([]);
+        setRestrictionRowsFromDb([]);
         setAssignments({});
+        setRestricciones({});
         setError(loadError.message);
       }
     };
@@ -123,54 +247,52 @@ export const WeeklyScheduleEditor = ({
     run();
   }, [semana, anio]);
 
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(storageKey);
-      setRestricciones(saved ? JSON.parse(saved) : {});
-    } catch (_error) {
-      setRestricciones({});
-    }
-  }, [storageKey]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(restricciones));
-    } catch (_error) {
-      // noop
-    }
-  }, [restricciones, storageKey]);
-
-  const handleChangeAssignment = (fecha, hora, exportadoraId) => {
-    const key = `${fecha}_${hora}`;
-    setAssignments((current) => ({
-      ...current,
-      [key]: exportadoraId,
-    }));
+  const handleDragStart = (payload) => {
+    setDragItem(payload);
   };
 
-  const handleChangeRestriction = (fecha, hora, tipoId) => {
+  const handleDrop = (fecha, hora) => {
+    if (!dragItem) return;
+
     const key = `${fecha}_${hora}`;
 
-    if (!tipoId) {
-      setRestricciones((current) => {
-        const copy = { ...current };
-        delete copy[key];
-        return copy;
-      });
-      return;
+    if (dragItem.type === 'entity') {
+      setAssignments((current) => ({
+        ...current,
+        [key]: String(dragItem.entity.id),
+      }));
     }
 
-    const tipo = tiposRestriccion.find((item) => String(item.id) === String(tipoId));
-    if (!tipo) return;
+    if (dragItem.type === 'restriction') {
+      setRestricciones((current) => ({
+        ...current,
+        [key]: {
+          id: dragItem.restriction.id,
+          nombre: dragItem.restriction.nombre,
+          color: dragItem.restriction.color,
+        },
+      }));
+    }
 
-    setRestricciones((current) => ({
-      ...current,
-      [key]: {
-        id: tipo.id,
-        nombre: tipo.nombre,
-        color: tipo.color,
-      },
-    }));
+    setDragItem(null);
+  };
+
+  const removeAssignment = (fecha, hora) => {
+    const key = `${fecha}_${hora}`;
+    setAssignments((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const removeRestriction = (fecha, hora) => {
+    const key = `${fecha}_${hora}`;
+    setRestricciones((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
   };
 
   const saveCalendar = async () => {
@@ -185,12 +307,27 @@ export const WeeklyScheduleEditor = ({
         dbMap[key] = row;
       });
 
-      const dbKeys = new Set(Object.keys(dbMap));
+      const dbRestrictionMap = {};
+      restrictionRowsFromDb.forEach((row) => {
+        const key = `${row.fecha}_${normalizeHora(row.hora_inicio)}`;
+        dbRestrictionMap[key] = row;
+      });
 
+      const dbKeys = new Set(Object.keys(dbMap));
       for (const key of dbKeys) {
         const assigned = assignments[key];
         if (!assigned) {
           await requestJson(`/turnos/${dbMap[key].id}`, {
+            method: 'DELETE',
+          });
+        }
+      }
+
+      const dbRestrictionKeys = new Set(Object.keys(dbRestrictionMap));
+      for (const key of dbRestrictionKeys) {
+        const restriction = restricciones[key];
+        if (!restriction) {
+          await requestJson(`/turnos-restricciones/${dbRestrictionMap[key].id}`, {
             method: 'DELETE',
           });
         }
@@ -216,8 +353,28 @@ export const WeeklyScheduleEditor = ({
         }
       }
 
+      for (const [key, restriction] of Object.entries(restricciones)) {
+        if (!restriction?.id) continue;
+
+        const [fecha, hora_inicio] = key.split('_');
+        const existing = dbRestrictionMap[key];
+
+        if (!existing || String(existing.tipo_restriccion_id) !== String(restriction.id)) {
+          await requestJson('/turnos-restricciones', {
+            method: 'POST',
+            body: JSON.stringify({
+              fecha,
+              hora_inicio,
+              tipo_restriccion_id: Number(restriction.id),
+              semana,
+              anio,
+            }),
+          });
+        }
+      }
+
       await loadWeek();
-      setSuccess('Calendario semanal guardado correctamente. Las restricciones visuales quedan guardadas localmente.');
+      setSuccess('Calendario semanal y restricciones guardados correctamente.');
     } catch (saveError) {
       setError(saveError.message);
     } finally {
@@ -241,10 +398,16 @@ export const WeeklyScheduleEditor = ({
         });
       }
 
+      for (const row of restrictionRowsFromDb) {
+        await requestJson(`/turnos-restricciones/${row.id}`, {
+          method: 'DELETE',
+        });
+      }
+
       setRowsFromDb([]);
+      setRestrictionRowsFromDb([]);
       setAssignments({});
       setRestricciones({});
-      localStorage.removeItem(storageKey);
       setSuccess(`Semana ${semana}/${anio} limpiada correctamente.`);
     } catch (clearError) {
       setError(clearError.message);
@@ -267,7 +430,13 @@ export const WeeklyScheduleEditor = ({
 
       <div
         className="panel panel--compact"
-        style={{ marginBottom: '1rem', display: 'grid', gridTemplateColumns: '180px 180px auto auto', gap: '1rem', alignItems: 'end' }}
+        style={{
+          marginBottom: '1rem',
+          display: 'grid',
+          gridTemplateColumns: '180px 180px auto auto',
+          gap: '1rem',
+          alignItems: 'end',
+        }}
       >
         <label>
           <div className="stat-label">Semana</div>
@@ -277,7 +446,13 @@ export const WeeklyScheduleEditor = ({
             max="53"
             value={semana}
             onChange={(event) => setSemana(Number(event.target.value || 1))}
-            style={{ width: '100%', marginTop: '0.4rem', padding: '0.6rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
+            style={{
+              width: '100%',
+              marginTop: '0.4rem',
+              padding: '0.6rem',
+              borderRadius: '10px',
+              border: '1px solid #cbd5e1',
+            }}
           />
         </label>
 
@@ -287,7 +462,13 @@ export const WeeklyScheduleEditor = ({
             type="number"
             value={anio}
             onChange={(event) => setAnio(Number(event.target.value || new Date().getFullYear()))}
-            style={{ width: '100%', marginTop: '0.4rem', padding: '0.6rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
+            style={{
+              width: '100%',
+              marginTop: '0.4rem',
+              padding: '0.6rem',
+              borderRadius: '10px',
+              border: '1px solid #cbd5e1',
+            }}
           />
         </label>
 
@@ -298,7 +479,7 @@ export const WeeklyScheduleEditor = ({
             padding: '0.75rem 1rem',
             borderRadius: '12px',
             border: 'none',
-            background: '#0f62fe',
+            background: '#2563eb',
             color: '#fff',
             cursor: 'pointer',
           }}
@@ -322,146 +503,219 @@ export const WeeklyScheduleEditor = ({
         </button>
       </div>
 
-      {tiposRestriccion.length ? (
-        <div className="panel panel--compact" style={{ marginBottom: '1rem' }}>
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">Restricciones visuales</p>
-              <h2>Tipos disponibles</h2>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-            {tiposRestriccion.map((tipo) => (
-              <span
-                key={tipo.id}
-                style={{
-                  display: 'inline-block',
-                  padding: '0.35rem 0.75rem',
-                  borderRadius: '999px',
-                  border: `1px solid ${tipo.color}`,
-                  color: tipo.color,
-                  background: `${tipo.color}22`,
-                  fontWeight: 700,
-                  fontSize: '0.85rem',
-                }}
-              >
-                {tipo.nombre}
-              </span>
-            ))}
-          </div>
+      <div style={{ ...compactPanelStyle }}>
+        <div className="stat-label" style={{ marginBottom: '0.75rem' }}>
+          Exportadoras (arrastra al calendario)
         </div>
-      ) : null}
-
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Turno</th>
-              {dates.map((date) => (
-                <th key={date}>{formatDateLabel(date)}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {orderedTurnos.map((turno) => {
-              const hora = normalizeHora(turno.hora_inicio);
-
-              return (
-                <tr key={turno.id}>
-                  <td>
-                    <strong>{turno.nombre}</strong>
-                    <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.35rem' }}>
-                      {normalizeHora(turno.hora_inicio)} - {normalizeHora(turno.hora_fin)}
-                    </div>
-                  </td>
-
-                  {dates.map((date) => {
-                    const key = `${date}_${hora}`;
-                    const selected = assignments[key] || '';
-                    const restriccion = restricciones[key];
-
-                    return (
-                      <td
-                        key={key}
-                        style={{
-                          background: restriccion ? `${restriccion.color}14` : 'transparent',
-                          borderLeft: restriccion ? `4px solid ${restriccion.color}` : undefined,
-                        }}
-                      >
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                          <select
-                            value={selected}
-                            onChange={(event) =>
-                              handleChangeAssignment(date, hora, event.target.value)
-                            }
-                            style={{
-                              width: '100%',
-                              minWidth: '160px',
-                              padding: '0.6rem',
-                              borderRadius: '10px',
-                              border: '1px solid #cbd5e1',
-                              background: '#fff',
-                            }}
-                          >
-                            <option value="">Sin asignar</option>
-                            {visibleEntities.map((entity) => (
-                              <option key={entity.id} value={entity.id}>
-                                {entity.label}
-                              </option>
-                            ))}
-                          </select>
-
-                          <select
-                            value={restriccion?.id || ''}
-                            onChange={(event) =>
-                              handleChangeRestriction(date, hora, event.target.value)
-                            }
-                            style={{
-                              width: '100%',
-                              minWidth: '160px',
-                              padding: '0.5rem',
-                              borderRadius: '10px',
-                              border: '1px solid #cbd5e1',
-                              background: '#fff',
-                              fontSize: '0.85rem',
-                            }}
-                          >
-                            <option value="">Sin restricción</option>
-                            {tiposRestriccion.map((tipo) => (
-                              <option key={tipo.id} value={tipo.id}>
-                                {tipo.nombre}
-                              </option>
-                            ))}
-                          </select>
-
-                          {restriccion ? (
-                            <span
-                              style={{
-                                display: 'inline-block',
-                                padding: '0.25rem 0.65rem',
-                                borderRadius: '999px',
-                                border: `1px solid ${restriccion.color}`,
-                                color: restriccion.color,
-                                background: `${restriccion.color}22`,
-                                fontWeight: 700,
-                                fontSize: '0.78rem',
-                                width: 'fit-content',
-                              }}
-                            >
-                              {restriccion.nombre}
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.7rem' }}>
+          {visibleEntities.map((entity) => (
+            <div
+              key={entity.id}
+              draggable
+              onDragStart={() => handleDragStart({ type: 'entity', entity })}
+              onDragEnd={() => setDragItem(null)}
+              style={dragCardStyle}
+            >
+              <div style={{ fontWeight: 700, color: '#0f172a' }}>
+                {getEntityLabel(entity)}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>
+                ID {entity.id}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
+
+      <div style={{ ...compactPanelStyle }}>
+        <div className="stat-label" style={{ marginBottom: '0.75rem' }}>
+          Restricciones (arrastra al calendario)
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.7rem' }}>
+          {tiposRestriccion.map((tipo) => (
+            <div
+              key={tipo.id}
+              draggable
+              onDragStart={() => handleDragStart({ type: 'restriction', restriction: tipo })}
+              onDragEnd={() => setDragItem(null)}
+              style={{
+                ...dragCardStyle,
+                borderColor: tipo.color,
+                color: tipo.color,
+                background: `${tipo.color}14`,
+              }}
+            >
+              <div style={{ fontWeight: 800 }}>{tipo.nombre}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {groupedSlots.length === 0 ? (
+        <div style={compactPanelStyle}>
+          No hay turnos definidos todavía. Crea al menos un turno antes de armar el calendario semanal.
+        </div>
+      ) : (
+        groupedSlots.map((turno) => (
+          <div
+            key={turno.id}
+            style={{ ...compactPanelStyle, overflowX: 'auto' }}
+          >
+            <div style={{ marginBottom: '0.75rem' }}>
+              <div className="stat-label">{turno.nombre}</div>
+              <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                {normalizeHora(turno.hora_inicio)} - {normalizeHora(turno.hora_fin)}
+              </div>
+            </div>
+
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1250px' }}>
+              <thead>
+                <tr>
+                  <th
+                    style={{
+                      border: '1px solid #dbe4f0',
+                      background: '#f8fafc',
+                      padding: '0.6rem',
+                      textAlign: 'left',
+                      position: 'sticky',
+                      left: 0,
+                      zIndex: 2,
+                    }}
+                  >
+                    Hora
+                  </th>
+                  {dates.map((date) => (
+                    <th
+                      key={date}
+                      style={{
+                        border: '1px solid #dbe4f0',
+                        background: '#f8fafc',
+                        padding: '0.6rem',
+                        minWidth: '165px',
+                      }}
+                    >
+                      <div style={{ textTransform: 'capitalize' }}>{formatDateLabel(date)}</div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.2rem' }}>
+                        {date}
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+
+              <tbody>
+                {turno.slots.map((hora) => (
+                  <tr key={`${turno.id}_${hora}`}>
+                    <td
+                      style={{
+                        border: '1px solid #dbe4f0',
+                        background: '#f8fafc',
+                        padding: '0.6rem',
+                        fontWeight: 700,
+                        position: 'sticky',
+                        left: 0,
+                        zIndex: 1,
+                      }}
+                    >
+                      {hora}
+                    </td>
+
+                    {dates.map((date) => {
+                      const key = `${date}_${hora}`;
+                      const assignedId = assignments[key];
+                      const assignedEntity = assignedId ? entityMap.get(String(assignedId)) : null;
+                      const selectedRestriction = restricciones[key] || null;
+
+                      return (
+                        <td
+                          key={key}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={() => handleDrop(date, hora)}
+                          style={{
+                            border: '1px solid #dbe4f0',
+                            padding: '0.5rem',
+                            verticalAlign: 'top',
+                            background: selectedRestriction?.color
+                              ? `${selectedRestriction.color}16`
+                              : '#fff',
+                            minHeight: '86px',
+                          }}
+                        >
+                          <div style={{ display: 'grid', gap: '0.45rem' }}>
+                            {assignedEntity ? (
+                              <div
+                                style={{
+                                  ...chipStyle,
+                                  background: '#dbeafe',
+                                  color: '#1d4ed8',
+                                  border: '1px solid #93c5fd',
+                                  justifyContent: 'space-between',
+                                }}
+                              >
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {getEntityLabel(assignedEntity)}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => removeAssignment(date, hora)}
+                                  style={{
+                                    border: 'none',
+                                    background: 'transparent',
+                                    color: '#1d4ed8',
+                                    cursor: 'pointer',
+                                    fontWeight: 800,
+                                  }}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                                Suelta aquí una exportadora
+                              </div>
+                            )}
+
+                            {selectedRestriction ? (
+                              <div
+                                style={{
+                                  ...chipStyle,
+                                  background: `${selectedRestriction.color}22`,
+                                  color: selectedRestriction.color,
+                                  border: `1px solid ${selectedRestriction.color}55`,
+                                  justifyContent: 'space-between',
+                                }}
+                              >
+                                <span>{selectedRestriction.nombre}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => removeRestriction(date, hora)}
+                                  style={{
+                                    border: 'none',
+                                    background: 'transparent',
+                                    color: selectedRestriction.color,
+                                    cursor: 'pointer',
+                                    fontWeight: 800,
+                                  }}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                                Suelta aquí una restricción
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))
+      )}
     </section>
   );
 };
