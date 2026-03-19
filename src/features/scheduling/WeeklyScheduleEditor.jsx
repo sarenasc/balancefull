@@ -125,6 +125,14 @@ const actionButtonStyle = {
   fontWeight: 600,
 };
 
+const selectStyle = {
+  width: '100%',
+  padding: '0.6rem',
+  borderRadius: '10px',
+  border: '1px solid #cbd5e1',
+  background: '#fff',
+};
+
 const getEntityLabel = (entity) =>
   entity?.label || entity?.exportadora || entity?.nombre || `Exportadora ${entity?.id}`;
 
@@ -168,6 +176,10 @@ export const WeeklyScheduleEditor = ({
   const [exporting, setExporting] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState(null);
   const [viewTurno, setViewTurno] = useState('all');
+  const [copyMode, setCopyMode] = useState('day');
+  const [copySourceDate, setCopySourceDate] = useState('');
+  const [copyTargetDate, setCopyTargetDate] = useState('');
+  const [copyTurnoId, setCopyTurnoId] = useState('');
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [dragItem, setDragItem] = useState(null);
@@ -176,6 +188,15 @@ export const WeeklyScheduleEditor = ({
   const [dirty, setDirty] = useState(false);
 
   const dates = useMemo(() => getDatesForWeek(semana, anio), [semana, anio]);
+
+  useEffect(() => {
+    if (!dates.length) return;
+    setCopySourceDate((current) => (current && dates.includes(current) ? current : dates[0]));
+    setCopyTargetDate((current) => {
+      if (current && dates.includes(current)) return current;
+      return dates[1] || dates[0];
+    });
+  }, [dates]);
 
   const visibleEntities = useMemo(
     () => entities.filter((entity) => Number(entity.visibleLinea ?? 1) === 1),
@@ -194,6 +215,11 @@ export const WeeklyScheduleEditor = ({
       ),
     [turnosDefinicion],
   );
+
+  useEffect(() => {
+    if (!orderedTurnos.length) return;
+    setCopyTurnoId((current) => current || String(orderedTurnos[0].id));
+  }, [orderedTurnos]);
 
   const timeSlots = useMemo(() => {
     if (orderedTurnos.length === 0) return [];
@@ -546,6 +572,61 @@ export const WeeklyScheduleEditor = ({
     applyToolToCell({ type: 'erase-restriction' }, fecha, hora);
   };
 
+  const handleCopyPaste = () => {
+    if (!copySourceDate || !copyTargetDate) {
+      setError('Selecciona día origen y día destino.');
+      return;
+    }
+
+    if (copySourceDate === copyTargetDate) {
+      setError('El día origen y el día destino no pueden ser iguales.');
+      return;
+    }
+
+    const slotsToCopy =
+      copyMode === 'day'
+        ? groupedSlots.flatMap((turno) => turno.slots)
+        : groupedSlots.find((turno) => String(turno.id) === String(copyTurnoId))?.slots || [];
+
+    if (!slotsToCopy.length) {
+      setError('No se encontraron bloques para copiar con la selección actual.');
+      return;
+    }
+
+    const nextAssignments = { ...assignments };
+    const nextRestrictions = { ...restricciones };
+
+    slotsToCopy.forEach((hora) => {
+      const sourceKey = `${copySourceDate}_${hora}`;
+      const targetKey = `${copyTargetDate}_${hora}`;
+
+      const sourceAssignment = assignments[sourceKey];
+      const sourceRestriction = restricciones[sourceKey];
+
+      if (sourceAssignment) {
+        nextAssignments[targetKey] = sourceAssignment;
+      } else {
+        delete nextAssignments[targetKey];
+      }
+
+      if (sourceRestriction) {
+        nextRestrictions[targetKey] = sourceRestriction;
+      } else {
+        delete nextRestrictions[targetKey];
+      }
+    });
+
+    setAssignments(nextAssignments);
+    setRestricciones(nextRestrictions);
+    setError(null);
+    setSuccess(
+      copyMode === 'day'
+        ? 'Planificación del día copiada correctamente.'
+        : 'Planificación del turno copiada correctamente.',
+    );
+    setDirty(true);
+  };
+
   const clearWeek = async () => {
     if (!window.confirm(`¿Limpiar completamente la semana ${semana} del año ${anio}?`)) {
       return;
@@ -727,6 +808,64 @@ export const WeeklyScheduleEditor = ({
 
       <div
         data-no-print="true"
+        style={{ ...compactPanelStyle, display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr auto', gap: '0.8rem', alignItems: 'end' }}
+      >
+        <label>
+          <div className="stat-label">Copiar</div>
+          <select value={copyMode} onChange={(event) => setCopyMode(event.target.value)} style={selectStyle}>
+            <option value="day">Día completo</option>
+            <option value="turno">Solo un turno</option>
+          </select>
+        </label>
+
+        <label>
+          <div className="stat-label">Día origen</div>
+          <select value={copySourceDate} onChange={(event) => setCopySourceDate(event.target.value)} style={selectStyle}>
+            {dates.map((date) => (
+              <option key={`src_${date}`} value={date}>
+                {formatDateLabel(date)} · {date}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <div className="stat-label">Día destino</div>
+          <select value={copyTargetDate} onChange={(event) => setCopyTargetDate(event.target.value)} style={selectStyle}>
+            {dates.map((date) => (
+              <option key={`dst_${date}`} value={date}>
+                {formatDateLabel(date)} · {date}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <button type="button" onClick={handleCopyPaste} style={{ ...actionButtonStyle, height: '44px' }}>
+          Copiar / pegar
+        </button>
+
+        {copyMode === 'turno' ? (
+          <label style={{ gridColumn: '1 / span 2' }}>
+            <div className="stat-label">Turno a copiar</div>
+            <select value={copyTurnoId} onChange={(event) => setCopyTurnoId(event.target.value)} style={selectStyle}>
+              {groupedSlots.map((turno) => (
+                <option key={`copy_turno_${turno.id}`} value={turno.id}>
+                  {turno.nombre} · {normalizeHora(turno.hora_inicio)} - {normalizeHora(turno.hora_fin)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
+        <div style={{ gridColumn: copyMode === 'turno' ? '3 / span 2' : '1 / -1', fontSize: '0.83rem', color: '#64748b' }}>
+          {copyMode === 'day'
+            ? 'Copia exportadoras y restricciones de un día completo hacia otro día.'
+            : 'Copia solo los bloques del turno seleccionado desde un día hacia otro día.'}
+        </div>
+      </div>
+
+      <div
+        data-no-print="true"
         style={{ ...compactPanelStyle, display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}
       >
         <div>
@@ -805,7 +944,7 @@ export const WeeklyScheduleEditor = ({
         <div>
           <div className="stat-label">Modo pintar</div>
           <div style={{ fontSize: '0.86rem', color: '#475569', marginTop: '0.2rem' }}>
-            Las restricciones ahora bloquean asignaciones y las exportadoras bloquean nuevas restricciones.
+            Las restricciones bloquean asignaciones y las exportadoras bloquean nuevas restricciones.
           </div>
         </div>
 
