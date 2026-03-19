@@ -56,7 +56,7 @@ export const OperationsEditor = ({
               const useCurado = Boolean(family?.usa_curado);
 
               const fields = useCurado
-                ? ['curado', 'proceso', 'cosecha']
+                ? ['cosecha', 'curado', 'proceso']
                 : ['cosecha', 'proceso'];
 
               return fields.map((field) => (
@@ -102,7 +102,7 @@ export const OperationsEditor = ({
       </div>
 
       <p className="body-copy" style={{ marginTop: '1rem' }}>
-        Si la familia usa curado, guardar cosecha puede generar automáticamente el valor de curado
+        Si la familia usa curado, guardar una cosecha puede generar automáticamente el valor de curado
         según las horas configuradas por exportadora.
       </p>
     </section>
