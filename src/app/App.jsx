@@ -8,6 +8,7 @@ import { ConfigEditor } from '../features/config/ConfigEditor';
 import { ProjectionPanel } from '../features/projection/ProjectionPanel';
 import { createProjectionMetrics } from '../features/projection/projectionModel';
 import { SchedulingSummary } from '../features/scheduling/SchedulingSummary';
+import { TurnoDefinitionEditor } from '../features/scheduling/TurnoDefinitionEditor';
 import { OperationsEditor } from '../features/operations/OperationsEditor';
 import { usePlannerData } from '../hooks/usePlannerData';
 
@@ -33,6 +34,7 @@ export const App = () => {
   const [parametrosEspecie, setParametrosEspecie] = useState([]);
   const [holidays, setHolidays] = useState([]);
   const [curadoHoursConfig, setCuradoHoursConfig] = useState({});
+  const [turnosDefinicion, setTurnosDefinicion] = useState([]);
   const [data, setData] = useState({});
   const [defaultParameters, setDefaultParameters] = useState({
     especie_id: null,
@@ -99,6 +101,21 @@ export const App = () => {
     };
 
     loadCuradoHours();
+  }, []);
+
+  useEffect(() => {
+    const loadTurnosDefinicion = async () => {
+      try {
+        const response = await fetch(`${appConfig.apiBaseUrl}/turnos-definicion`);
+        if (!response.ok) throw new Error('No fue posible cargar turnos');
+        const rows = await response.json();
+        setTurnosDefinicion(rows);
+      } catch (_error) {
+        setTurnosDefinicion([]);
+      }
+    };
+
+    loadTurnosDefinicion();
   }, []);
 
   const familyBySpeciesId = useMemo(() => {
@@ -171,6 +188,11 @@ export const App = () => {
             setHolidays={setHolidays}
             curadoHoursConfig={curadoHoursConfig}
             setCuradoHoursConfig={setCuradoHoursConfig}
+          />
+
+          <TurnoDefinitionEditor
+            turnosDefinicion={turnosDefinicion}
+            setTurnosDefinicion={setTurnosDefinicion}
           />
 
           <OperationsEditor
