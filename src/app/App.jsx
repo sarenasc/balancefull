@@ -23,6 +23,16 @@ const panelHintStyle = {
   boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)',
 };
 
+const subNavButtonStyle = (active) => ({
+  padding: '0.75rem 0.95rem',
+  borderRadius: '10px',
+  border: active ? '1px solid #2563eb' : '1px solid #dbe4f0',
+  background: active ? '#eff6ff' : '#fff',
+  color: active ? '#2563eb' : '#0f172a',
+  fontWeight: 700,
+  cursor: 'pointer',
+});
+
 export const App = () => {
   const planner = usePlannerData();
   const {
@@ -40,6 +50,7 @@ export const App = () => {
   } = planner;
 
   const [activeView, setActiveView] = useState('operacion');
+  const [operacionView, setOperacionView] = useState('edicion');
   const [entities, setEntities] = useState([]);
   const [familias, setFamilias] = useState([]);
   const [especies, setEspecies] = useState([]);
@@ -261,6 +272,61 @@ export const App = () => {
     </>
   );
 
+  const renderOperacionBody = () => {
+    switch (operacionView) {
+      case 'edicion':
+        return (
+          <OperationsEditor
+            entities={entities}
+            familias={familias}
+            especies={especies}
+            dates={dates}
+            data={data}
+            setData={setData}
+            temporadaId={temporadaId}
+            curadoHoursConfig={curadoHoursConfig}
+          />
+        );
+
+      case 'resumen':
+        return (
+          <div style={panelHintStyle}>
+            <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>
+              Resumen semanal
+            </div>
+            <div style={{ marginTop: '0.5rem', color: '#475569', lineHeight: 1.6 }}>
+              Aquí vamos a construir la siguiente capa de Operación:
+              <ul style={{ marginTop: '0.6rem' }}>
+                <li>totales semanales de cosecha, curado y proceso,</li>
+                <li>balance por exportadora,</li>
+                <li>lectura operativa previa al calendario.</li>
+              </ul>
+            </div>
+          </div>
+        );
+
+      case 'movimientos':
+        return (
+          <div style={panelHintStyle}>
+            <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>
+              Movimientos
+            </div>
+            <div style={{ marginTop: '0.5rem', color: '#475569', lineHeight: 1.6 }}>
+              Aquí vamos a dejar herramientas para:
+              <ul style={{ marginTop: '0.6rem' }}>
+                <li>copiar/mover operación entre días o semanas,</li>
+                <li>limpiar semanas operativas,</li>
+                <li>ajustes masivos previos a la planificación.</li>
+              </ul>
+            </div>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
   const renderOperacion = () => (
     <>
       <div style={panelHintStyle}>
@@ -272,16 +338,33 @@ export const App = () => {
         </div>
       </div>
 
-      <OperationsEditor
-        entities={entities}
-        familias={familias}
-        especies={especies}
-        dates={dates}
-        data={data}
-        setData={setData}
-        temporadaId={temporadaId}
-        curadoHoursConfig={curadoHoursConfig}
-      />
+      <div style={{ ...panelHintStyle, display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={() => setOperacionView('edicion')}
+          style={subNavButtonStyle(operacionView === 'edicion')}
+        >
+          Edición rápida
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setOperacionView('resumen')}
+          style={subNavButtonStyle(operacionView === 'resumen')}
+        >
+          Resumen semanal
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setOperacionView('movimientos')}
+          style={subNavButtonStyle(operacionView === 'movimientos')}
+        >
+          Movimientos
+        </button>
+      </div>
+
+      {renderOperacionBody()}
     </>
   );
 
