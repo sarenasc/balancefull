@@ -68,6 +68,20 @@ export const useOperationsEditor = ({
     return balance;
   };
 
+
+  const setDraftCell = ({ entityId, date, field, rawValue }) => {
+    setData((current) => ({
+      ...current,
+      [entityId]: {
+        ...current[entityId],
+        [date]: {
+          ...(current[entityId]?.[date] || { cosecha: 0, curado: 0, proceso: 0 }),
+          [field]: rawValue === '' ? 0 : Number(rawValue),
+        },
+      },
+    }));
+  };
+
   const updateCell = async ({ entity, date, field, value, useCurado }) => {
     const numericValue = Number(value);
 
@@ -162,6 +176,7 @@ export const useOperationsEditor = ({
     visibleEntities,
     savingCell,
     error,
+    setDraftCell,
     updateCell,
   };
 };

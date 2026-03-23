@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useOperationsEditor } from '../operations/useOperationsEditor';
 import { buildBalanceModel } from './balanceModel';
 import { BalanceFamilyTable } from './BalanceFamilyTable';
 
@@ -32,9 +33,25 @@ export const BalanceBoard = ({
   especies,
   entities,
   data,
+  setData,
+  temporadaId,
   curadoHoursConfig,
   parametersBySpeciesId,
 }) => {
+
+  const { savingCell, error, updateCell, setDraftCell } = useOperationsEditor({
+    entities,
+    data,
+    setData,
+    temporadaId,
+    curadoHoursConfig,
+  });
+
+  const entityMap = useMemo(
+    () => new Map(entities.map((entity) => [Number(entity.id), entity])),
+    [entities],
+  );
+
   const model = useMemo(
     () =>
       buildBalanceModel({
@@ -83,6 +100,8 @@ export const BalanceBoard = ({
           </div>
         </div>
       </div>
+
+      {error ? <div className="status-banner status-banner--warn">{error}</div> : null}
 
       {!familyTabs.length ? (
         <div className="status-banner status-banner--warn">
@@ -152,7 +171,13 @@ export const BalanceBoard = ({
                 </div>
               </div>
 
-              <BalanceFamilyTable family={activeFamily} />
+              <BalanceFamilyTable
+                family={activeFamily}
+                entityMap={entityMap}
+                setDraftCell={setDraftCell}
+                updateCell={updateCell}
+                savingCell={savingCell}
+              />
             </>
           ) : null}
         </>

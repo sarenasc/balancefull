@@ -42,8 +42,26 @@ const balanceValueStyle = (value) => {
   };
 };
 
+const editableInputStyle = (isSaving) => ({
+  width: '100%',
+  minWidth: '82px',
+  padding: '0.4rem 0.5rem',
+  borderRadius: '10px',
+  border: '1px solid #cbd5e1',
+  background: isSaving ? '#eff6ff' : '#fff',
+  textAlign: 'right',
+});
+
 const renderRows = (rows, dates, options = {}) => {
-  const { showAutoHint = false } = options;
+  const {
+    showAutoHint = false,
+    editable = false,
+    family = null,
+    entityMap = new Map(),
+    setDraftCell,
+    updateCell,
+    savingCell,
+  } = options;
 
   return rows.map((row) => (
     <tr key={`${row.field}_${row.entityId}`}>
@@ -64,6 +82,9 @@ const renderRows = (rows, dates, options = {}) => {
         const value = Number(row.values?.[date] || 0);
         const autoValue = Number(row.autoValues?.[date] || 0);
 
+        const key = `${row.field}_${row.entityId}_${date}`;
+        const entity = entityMap.get(Number(row.entityId));
+
         return (
           <td
             key={`${row.field}_${row.entityId}_${date}`}
@@ -74,12 +95,47 @@ const renderRows = (rows, dates, options = {}) => {
               background: '#fff',
             }}
           >
-            <div>{formatNumber(value)}</div>
-            {showAutoHint && autoValue > 0 ? (
-              <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
-                auto: {formatNumber(autoValue)}
-              </div>
-            ) : null}
+            {editable && entity ? (
+              <>
+                <input
+                  type="number"
+                  min="0"
+                  value={value}
+                  onChange={(event) =>
+                    setDraftCell?.({
+                      entityId: row.entityId,
+                      date,
+                      field: row.field,
+                      rawValue: event.target.value,
+                    })
+                  }
+                  onBlur={(event) =>
+                    updateCell?.({
+                      entity,
+                      date,
+                      field: row.field,
+                      value: event.target.value,
+                      useCurado: Boolean(family?.usaCurado),
+                    })
+                  }
+                  style={editableInputStyle(savingCell === key)}
+                />
+                {showAutoHint && autoValue > 0 ? (
+                  <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.2rem' }}>
+                    auto: {formatNumber(autoValue)}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <div>{formatNumber(value)}</div>
+                {showAutoHint && autoValue > 0 ? (
+                  <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                    auto: {formatNumber(autoValue)}
+                  </div>
+                ) : null}
+              </>
+            )}
           </td>
         );
       })}
@@ -121,7 +177,13 @@ const renderTotalRow = ({ label, dates, values, digits = 0, highlight = false })
   </tr>
 );
 
-export const BalanceFamilyTable = ({ family }) => {
+export const BalanceFamilyTable = ({
+  family,
+  entityMap = new Map(),
+  setDraftCell,
+  updateCell,
+  savingCell,
+}) => {
   if (!family) return null;
 
   const { familyName, usaCurado, seasonStart, seasonEnd, dates, sections, totals } = family;
@@ -184,7 +246,14 @@ export const BalanceFamilyTable = ({ family }) => {
                 Cosechas
               </td>
             </tr>
-            {renderRows(sections.cosecha, dates)}
+            {renderRows(sections.cosecha, dates, {
+              editable: true,
+              family,
+              entityMap,
+              setDraftCell,
+              updateCell,
+              savingCell,
+            })}
 
             <tr>
               <td
@@ -194,7 +263,15 @@ export const BalanceFamilyTable = ({ family }) => {
                 {usaCurado ? 'Curado / Liberación' : 'Curado (no aplica, editable si se requiere)'}
               </td>
             </tr>
-            {renderRows(sections.curado, dates, { showAutoHint: usaCurado })}
+            {renderRows(sections.curado, dates, {
+              showAutoHint: usaCurado,
+              editable: true,
+              family,
+              entityMap,
+              setDraftCell,
+              updateCell,
+              savingCell,
+            })}
 
             <tr>
               <td
@@ -204,7 +281,14 @@ export const BalanceFamilyTable = ({ family }) => {
                 Procesos
               </td>
             </tr>
-            {renderRows(sections.proceso, dates)}
+            {renderRows(sections.proceso, dates, {
+              editable: true,
+              family,
+              entityMap,
+              setDraftCell,
+              updateCell,
+              savingCell,
+            })}
 
             {renderTotalRow({
               label: 'TOTAL PROCESOS',
