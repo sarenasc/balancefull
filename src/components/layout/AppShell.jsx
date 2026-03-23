@@ -98,7 +98,7 @@ export const AppShell = ({
               lineHeight: 1.45,
             }}
           >
-            La data operativa nace en <strong>Operación</strong> y luego alimenta calendario, balance y KPI.
+            La data operativa se edita en <strong>Balance</strong> y desde ahí alimenta calendario, dashboard y KPI.
           </div>
         </div>
       </aside>
