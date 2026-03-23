@@ -34,6 +34,7 @@ export const BalanceBoard = ({
   entities,
   data,
   setData,
+  holidays,
   temporadaId,
   curadoHoursConfig,
   parametersBySpeciesId,
@@ -173,6 +174,7 @@ export const BalanceBoard = ({
 
               <BalanceFamilyTable
                 family={activeFamily}
+                holidays={holidays}
                 entityMap={entityMap}
                 setDraftCell={setDraftCell}
                 updateCell={updateCell}

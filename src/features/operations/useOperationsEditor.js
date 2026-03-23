@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { appConfig } from '../../app/config';
-import { addDays } from '../../utils/date';
+import { getCuradoReleaseDate } from '../../utils/date';
 
 const apiUrl = appConfig.apiBaseUrl;
 
@@ -113,7 +113,7 @@ export const useOperationsEditor = ({
     }
 
     setError(null);
-    setSavingCell(`${entity.id}_${date}_${field}`);
+    setSavingCell(`${field}_${entity.id}_${date}`);
 
     setData((current) => ({
       ...current,
@@ -137,10 +137,9 @@ export const useOperationsEditor = ({
 
       if (field === 'cosecha' && useCurado) {
         const horasCurado = Number(curadoHoursConfig?.[entity.id] ?? entity.horas_curado ?? 48);
-        const diasOffset = Math.round(horasCurado / 24) + 1;
-        const curadoFecha = addDays(date, diasOffset);
+        const curadoFecha = getCuradoReleaseDate(date, horasCurado);
 
-        if (data[entity.id]?.[curadoFecha] !== undefined) {
+        if (curadoFecha) {
           await saveCellBySection({
             section: 'curado',
             entityId: entity.id,

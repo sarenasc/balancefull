@@ -287,6 +287,7 @@ export const App = () => {
         entities={entities}
         data={data}
         setData={setData}
+        holidays={holidays}
         temporadaId={temporadaId}
         curadoHoursConfig={curadoHoursConfig}
         parametersBySpeciesId={parametersBySpeciesId}

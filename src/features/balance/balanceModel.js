@@ -1,23 +1,14 @@
+import { addDays, getCuradoReleaseDate } from '../../utils/date';
+
 const normalizeDate = (value) => {
   if (!value) return null;
   if (typeof value === 'string') return value.slice(0, 10);
   return new Date(value).toISOString().slice(0, 10);
 };
 
-const addDays = (dateString, days) => {
-  const date = new Date(`${dateString}T12:00:00`);
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
-};
-
 const safeNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const hoursToDays = (hours) => {
-  const safe = safeNumber(hours);
-  return Math.max(0, Math.ceil(safe / 24));
 };
 
 const getEntityLabel = (entity) =>
@@ -28,6 +19,9 @@ const getEntityLabel = (entity) =>
 
 const buildSpeciesMap = (especies = []) =>
   new Map(especies.map((item) => [Number(item.id), item]));
+
+const getEntitySpeciesId = (entity) =>
+  Number(entity?.especieId ?? entity?.especie_id ?? 0);
 
 const buildFamilyDateRange = (familia, fallbackDates = []) => {
   const start = normalizeDate(familia?.fecha_inicio) || fallbackDates[0] || null;
@@ -56,7 +50,7 @@ const buildEntityFamilyMap = ({ entities = [], especies = [] }) => {
 
   return new Map(
     entities.map((entity) => {
-      const especie = speciesMap.get(Number(entity.especie_id));
+      const especie = speciesMap.get(getEntitySpeciesId(entity));
       return [Number(entity.id), Number(especie?.familia_id ?? entity?.familia_id ?? 0)];
     }),
   );
@@ -90,7 +84,7 @@ const buildCuradoAutoMap = ({
         curadoHoursConfig?.[entityId] ?? entity?.horas_curado ?? 0,
       );
 
-      const releaseDate = addDays(date, hoursToDays(curadoHours));
+      const releaseDate = getCuradoReleaseDate(date, curadoHours);
       if (!familyDateSet.has(releaseDate)) return;
 
       result[entityId][releaseDate] += cosecha;
@@ -137,7 +131,7 @@ const buildFamilySections = ({
 
   familyEntities.forEach((entity) => {
     const entityId = Number(entity.id);
-    const especieId = Number(entity.especie_id ?? 0);
+    const especieId = getEntitySpeciesId(entity);
     const params =
       parametersBySpeciesId?.get?.(especieId) ||
       parametersBySpeciesId?.get?.(null) || {
