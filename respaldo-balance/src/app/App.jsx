@@ -1,0 +1,501 @@
+import { useEffect, useMemo, useState } from 'react';
+import { AppShell } from '../components/layout/AppShell';
+import { StatusBanner } from '../components/ui/StatusBanner';
+import { appConfig } from './config';
+import { DashboardOverview } from '../features/dashboard/DashboardOverview';
+import { ConfigSummary } from '../features/config/ConfigSummary';
+import { ConfigEditor } from '../features/config/ConfigEditor';
+import { ProjectionPanel } from '../features/projection/ProjectionPanel';
+import { createProjectionMetrics } from '../features/projection/projectionModel';
+import { BalanceBoard } from '../features/balance/BalanceBoard';
+import { SchedulingSummary } from '../features/scheduling/SchedulingSummary';
+import { TurnoDefinitionEditor } from '../features/scheduling/TurnoDefinitionEditor';
+import { WeeklyScheduleEditor } from '../features/scheduling/WeeklyScheduleEditor';
+import { RestrictionTypeEditor } from '../features/scheduling/RestrictionTypeEditor';
+import { OperationsEditor } from '../features/operations/OperationsEditor';
+import { usePlannerData } from '../hooks/usePlannerData';
+
+const panelHintStyle = {
+  marginBottom: '1rem',
+  padding: '1rem 1.1rem',
+  border: '1px solid #dbe4f0',
+  borderRadius: '12px',
+  background: '#fff',
+  boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)',
+};
+
+const subNavButtonStyle = (active) => ({
+  padding: '0.75rem 0.95rem',
+  borderRadius: '10px',
+  border: active ? '1px solid #2563eb' : '1px solid #dbe4f0',
+  background: active ? '#eff6ff' : '#fff',
+  color: active ? '#2563eb' : '#0f172a',
+  fontWeight: 700,
+  cursor: 'pointer',
+});
+
+export const App = () => {
+  const planner = usePlannerData();
+  const {
+    status,
+    source,
+    error,
+    entities: initialEntities,
+    familias: initialFamilias,
+    especies: initialEspecies,
+    parametrosEspecie: initialParametrosEspecie,
+    holidays: initialHolidays,
+    data: initialData,
+    dates,
+    temporadaId,
+  } = planner;
+
+  const [activeView, setActiveView] = useState('operacion');
+  const [operacionView, setOperacionView] = useState('edicion');
+  const [entities, setEntities] = useState([]);
+  const [familias, setFamilias] = useState([]);
+  const [especies, setEspecies] = useState([]);
+  const [parametrosEspecie, setParametrosEspecie] = useState([]);
+  const [holidays, setHolidays] = useState([]);
+  const [curadoHoursConfig, setCuradoHoursConfig] = useState({});
+  const [turnosDefinicion, setTurnosDefinicion] = useState([]);
+  const [tiposRestriccion, setTiposRestriccion] = useState([]);
+  const [data, setData] = useState({});
+  const [defaultParameters, setDefaultParameters] = useState({
+    especie_id: null,
+    bins_por_hora: 18,
+    horas_por_dia: 16,
+    kg_por_bin: 460,
+  });
+
+  useEffect(() => {
+    setEntities(initialEntities);
+  }, [initialEntities]);
+
+  useEffect(() => {
+    setFamilias(initialFamilias);
+  }, [initialFamilias]);
+
+  useEffect(() => {
+    setEspecies(initialEspecies);
+  }, [initialEspecies]);
+
+  useEffect(() => {
+    setParametrosEspecie(initialParametrosEspecie);
+  }, [initialParametrosEspecie]);
+
+  useEffect(() => {
+    setHolidays(initialHolidays || []);
+  }, [initialHolidays]);
+
+  useEffect(() => {
+    setData(initialData);
+  }, [initialData]);
+
+  useEffect(() => {
+    const fallback =
+      parametrosEspecie.find((item) => item.especie_id == null) || {
+        especie_id: null,
+        bins_por_hora: 18,
+        horas_por_dia: 16,
+        kg_por_bin: 460,
+      };
+
+    setDefaultParameters({
+      especie_id: null,
+      bins_por_hora: Number(fallback.bins_por_hora ?? 18),
+      horas_por_dia: Number(fallback.horas_por_dia ?? 16),
+      kg_por_bin: Number(fallback.kg_por_bin ?? 460),
+    });
+  }, [parametrosEspecie]);
+
+  useEffect(() => {
+    const loadCuradoHours = async () => {
+      try {
+        const response = await fetch(`${appConfig.apiBaseUrl}/curado-horas-config`);
+        if (!response.ok) throw new Error('No fue posible cargar horas de curado');
+        const rows = await response.json();
+        const map = {};
+        rows.forEach((row) => {
+          map[Number(row.exportadora_id)] = Number(row.horas_curado);
+        });
+        setCuradoHoursConfig(map);
+      } catch (_error) {
+        setCuradoHoursConfig({});
+      }
+    };
+
+    loadCuradoHours();
+  }, []);
+
+  useEffect(() => {
+    const loadTurnosDefinicion = async () => {
+      try {
+        const response = await fetch(`${appConfig.apiBaseUrl}/turnos-definicion`);
+        if (!response.ok) throw new Error('No fue posible cargar turnos');
+        const rows = await response.json();
+        setTurnosDefinicion(rows);
+      } catch (_error) {
+        setTurnosDefinicion([]);
+      }
+    };
+
+    loadTurnosDefinicion();
+  }, []);
+
+  useEffect(() => {
+    const loadTiposRestriccion = async () => {
+      try {
+        const response = await fetch(`${appConfig.apiBaseUrl}/tipos-restriccion`);
+        if (!response.ok) throw new Error('No fue posible cargar restricciones');
+        const rows = await response.json();
+        setTiposRestriccion(rows);
+      } catch (_error) {
+        setTiposRestriccion([]);
+      }
+    };
+
+    loadTiposRestriccion();
+  }, []);
+
+  const familyBySpeciesId = useMemo(() => {
+    const familyMap = new Map(familias.map((family) => [Number(family.id), family]));
+    return new Map(
+      especies.map((species) => [Number(species.id), familyMap.get(Number(species.familia_id))]),
+    );
+  }, [familias, especies]);
+
+  const parametersBySpeciesId = useMemo(() => {
+    const specific = parametrosEspecie.filter((item) => item.especie_id != null);
+
+    return new Map([
+      [
+        null,
+        {
+          bins_por_hora: Number(defaultParameters.bins_por_hora ?? 18),
+          horas_por_dia: Number(defaultParameters.horas_por_dia ?? 16),
+          kg_por_bin: Number(defaultParameters.kg_por_bin ?? 460),
+        },
+      ],
+      ...specific.map((item) => [
+        Number(item.especie_id),
+        {
+          bins_por_hora: Number(item.bins_por_hora ?? 18),
+          horas_por_dia: Number(item.horas_por_dia ?? 16),
+          kg_por_bin: Number(item.kg_por_bin ?? 460),
+        },
+      ]),
+    ]);
+  }, [parametrosEspecie, defaultParameters]);
+
+  const metrics = useMemo(
+    () =>
+      createProjectionMetrics({
+        dates,
+        entities,
+        data,
+        familyBySpeciesId,
+        parametersBySpeciesId,
+      }),
+    [dates, entities, data, familyBySpeciesId, parametersBySpeciesId],
+  );
+
+  const navSections = [
+    {
+      label: 'Principal',
+      items: [
+        {
+          key: 'operacion',
+          label: 'Operación',
+          icon: '🧮',
+          description:
+            'Edición rápida de cosecha, curado y proceso. Desde aquí nace la data base del balance.',
+        },
+        {
+          key: 'balance',
+          label: 'Balance',
+          icon: '📘',
+          description:
+            'Vista operacional por familia con cosecha, curado, proceso, horas y balance.',
+        },
+        {
+          key: 'dashboard',
+          label: 'Dashboard',
+          icon: '📊',
+          description:
+            'Vista general y resumida. Ideal para revisar el estado global sin editar datos.',
+        },
+      ],
+    },
+    {
+      label: 'Planificación',
+      items: [
+        {
+          key: 'calendario',
+          label: 'Calendario',
+          icon: '🗓️',
+          description:
+            'Planificación semanal de turnos y restricciones. Se alimenta desde Operación.',
+        },
+      ],
+    },
+    {
+      label: 'Parámetros',
+      items: [
+        {
+          key: 'configuracion',
+          label: 'Configuración',
+          icon: '⚙️',
+          description:
+            'Familias, especies, parámetros, visibilidad, feriados y horas de curado.',
+        },
+      ],
+    },
+  ];
+
+  const renderDashboard = () => (
+    <>
+      <div style={panelHintStyle}>
+        <div style={{ fontSize: '0.78rem', letterSpacing: '0.18em', color: '#64748b', textTransform: 'uppercase' }}>
+          Dashboard
+        </div>
+        <div style={{ marginTop: '0.35rem', fontSize: '0.95rem', color: '#334155' }}>
+          Vista general del sistema. Aquí irán luego los KPI reales una vez que Operación y Balance estén consolidados.
+        </div>
+      </div>
+
+      <DashboardOverview entities={entities} metrics={metrics} />
+
+      <div className="layout-grid">
+        <ProjectionPanel entities={entities} metrics={metrics} />
+        <div className="sidebar-stack">
+          <ConfigSummary
+            apiBaseUrl={appConfig.apiBaseUrl}
+            planningStart={appConfig.planningStart}
+            planningDays={appConfig.planningDays}
+          />
+          <SchedulingSummary families={familias} />
+        </div>
+      </div>
+    </>
+  );
+
+  const renderOperacionBody = () => {
+    switch (operacionView) {
+      case 'edicion':
+        return (
+          <OperationsEditor
+            entities={entities}
+            familias={familias}
+            especies={especies}
+            dates={dates}
+            data={data}
+            setData={setData}
+            temporadaId={temporadaId}
+            curadoHoursConfig={curadoHoursConfig}
+          />
+        );
+
+      case 'resumen':
+        return (
+          <div style={panelHintStyle}>
+            <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>
+              Resumen semanal
+            </div>
+            <div style={{ marginTop: '0.5rem', color: '#475569', lineHeight: 1.6 }}>
+              Aquí vamos a construir la siguiente capa de Operación:
+              <ul style={{ marginTop: '0.6rem' }}>
+                <li>totales semanales de cosecha, curado y proceso,</li>
+                <li>balance por exportadora,</li>
+                <li>lectura operativa previa al calendario.</li>
+              </ul>
+            </div>
+          </div>
+        );
+
+      case 'movimientos':
+        return (
+          <div style={panelHintStyle}>
+            <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>
+              Movimientos
+            </div>
+            <div style={{ marginTop: '0.5rem', color: '#475569', lineHeight: 1.6 }}>
+              Aquí vamos a dejar herramientas para:
+              <ul style={{ marginTop: '0.6rem' }}>
+                <li>copiar/mover operación entre días o semanas,</li>
+                <li>limpiar semanas operativas,</li>
+                <li>ajustes masivos previos a la planificación.</li>
+              </ul>
+            </div>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  const renderOperacion = () => (
+    <>
+      <div style={panelHintStyle}>
+        <div style={{ fontSize: '0.78rem', letterSpacing: '0.18em', color: '#64748b', textTransform: 'uppercase' }}>
+          Operación
+        </div>
+        <div style={{ marginTop: '0.35rem', fontSize: '0.95rem', color: '#334155' }}>
+          Centro del proyecto. Desde aquí se edita la operación diaria que alimenta luego balance, planificación y KPI.
+        </div>
+      </div>
+
+      <div style={{ ...panelHintStyle, display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={() => setOperacionView('edicion')}
+          style={subNavButtonStyle(operacionView === 'edicion')}
+        >
+          Edición rápida
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setOperacionView('resumen')}
+          style={subNavButtonStyle(operacionView === 'resumen')}
+        >
+          Resumen semanal
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setOperacionView('movimientos')}
+          style={subNavButtonStyle(operacionView === 'movimientos')}
+        >
+          Movimientos
+        </button>
+      </div>
+
+      {renderOperacionBody()}
+    </>
+  );
+
+  const renderBalance = () => (
+    <>
+      <div style={panelHintStyle}>
+        <div
+          style={{
+            fontSize: '0.78rem',
+            letterSpacing: '0.18em',
+            color: '#64748b',
+            textTransform: 'uppercase',
+          }}
+        >
+          Balance
+        </div>
+        <div style={{ marginTop: '0.35rem', fontSize: '0.95rem', color: '#334155' }}>
+          Balance operacional por familia. Aquí consolidamos cosecha, curado, proceso,
+          horas requeridas y existencia futura.
+        </div>
+      </div>
+
+      <BalanceBoard
+        dates={dates}
+        familias={familias}
+        especies={especies}
+        entities={entities}
+        data={data}
+        curadoHoursConfig={curadoHoursConfig}
+        parametersBySpeciesId={parametersBySpeciesId}
+      />
+    </>
+  );
+
+  const renderCalendario = () => (
+    <>
+      <div style={panelHintStyle}>
+        <div style={{ fontSize: '0.78rem', letterSpacing: '0.18em', color: '#64748b', textTransform: 'uppercase' }}>
+          Calendario
+        </div>
+        <div style={{ marginTop: '0.35rem', fontSize: '0.95rem', color: '#334155' }}>
+          Capa de planificación semanal. Aquí bajamos la operación ya definida a turnos y bloques de trabajo.
+        </div>
+      </div>
+
+      <TurnoDefinitionEditor
+        turnosDefinicion={turnosDefinicion}
+        setTurnosDefinicion={setTurnosDefinicion}
+      />
+
+      <RestrictionTypeEditor
+        tiposRestriccion={tiposRestriccion}
+        setTiposRestriccion={setTiposRestriccion}
+      />
+
+      <WeeklyScheduleEditor
+        turnosDefinicion={turnosDefinicion}
+        entities={entities}
+        tiposRestriccion={tiposRestriccion}
+      />
+    </>
+  );
+
+  const renderConfiguracion = () => (
+    <>
+      <div style={panelHintStyle}>
+        <div style={{ fontSize: '0.78rem', letterSpacing: '0.18em', color: '#64748b', textTransform: 'uppercase' }}>
+          Configuración
+        </div>
+        <div style={{ marginTop: '0.35rem', fontSize: '0.95rem', color: '#334155' }}>
+          Ajustes base del sistema: especies, familias, feriados, parámetros generales y horas de curado.
+        </div>
+      </div>
+
+      <ConfigEditor
+        entities={entities}
+        setEntities={setEntities}
+        defaultParameters={defaultParameters}
+        setDefaultParameters={setDefaultParameters}
+        familias={familias}
+        setFamilias={setFamilias}
+        especies={especies}
+        setEspecies={setEspecies}
+        parametrosEspecie={parametrosEspecie}
+        setParametrosEspecie={setParametrosEspecie}
+        holidays={holidays}
+        setHolidays={setHolidays}
+        curadoHoursConfig={curadoHoursConfig}
+        setCuradoHoursConfig={setCuradoHoursConfig}
+      />
+    </>
+  );
+
+  const renderActiveView = () => {
+    switch (activeView) {
+      case 'dashboard':
+        return renderDashboard();
+      case 'operacion':
+        return renderOperacion();
+      case 'balance':
+        return renderBalance();
+      case 'calendario':
+        return renderCalendario();
+      case 'configuracion':
+        return renderConfiguracion();
+      default:
+        return renderOperacion();
+    }
+  };
+
+  return (
+    <AppShell
+      title="Balance operacional moderno"
+      subtitle="Base organizada por módulos."
+      navSections={navSections}
+      activeView={activeView}
+      onChangeView={setActiveView}
+    >
+      <StatusBanner source={source} error={error} />
+
+      {status === 'loading' ? <div className="panel">Cargando información inicial…</div> : null}
+
+      {status === 'ready' ? renderActiveView() : null}
+    </AppShell>
+  );
+};
