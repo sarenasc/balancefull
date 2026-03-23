@@ -7,6 +7,7 @@ import { ConfigSummary } from '../features/config/ConfigSummary';
 import { ConfigEditor } from '../features/config/ConfigEditor';
 import { ProjectionPanel } from '../features/projection/ProjectionPanel';
 import { createProjectionMetrics } from '../features/projection/projectionModel';
+import { BalanceBoard } from '../features/balance/BalanceBoard';
 import { SchedulingSummary } from '../features/scheduling/SchedulingSummary';
 import { TurnoDefinitionEditor } from '../features/scheduling/TurnoDefinitionEditor';
 import { WeeklyScheduleEditor } from '../features/scheduling/WeeklyScheduleEditor';
@@ -211,6 +212,13 @@ export const App = () => {
             'Edición rápida de cosecha, curado y proceso. Desde aquí nace la data base del balance.',
         },
         {
+          key: 'balance',
+          label: 'Balance',
+          icon: '📘',
+          description:
+            'Vista operacional por familia con cosecha, curado, proceso, horas y balance.',
+        },
+        {
           key: 'dashboard',
           label: 'Dashboard',
           icon: '📊',
@@ -368,6 +376,37 @@ export const App = () => {
     </>
   );
 
+  const renderBalance = () => (
+    <>
+      <div style={panelHintStyle}>
+        <div
+          style={{
+            fontSize: '0.78rem',
+            letterSpacing: '0.18em',
+            color: '#64748b',
+            textTransform: 'uppercase',
+          }}
+        >
+          Balance
+        </div>
+        <div style={{ marginTop: '0.35rem', fontSize: '0.95rem', color: '#334155' }}>
+          Balance operacional por familia. Aquí consolidamos cosecha, curado, proceso,
+          horas requeridas y existencia futura.
+        </div>
+      </div>
+
+      <BalanceBoard
+        dates={dates}
+        familias={familias}
+        especies={especies}
+        entities={entities}
+        data={data}
+        curadoHoursConfig={curadoHoursConfig}
+        parametersBySpeciesId={parametersBySpeciesId}
+      />
+    </>
+  );
+
   const renderCalendario = () => (
     <>
       <div style={panelHintStyle}>
@@ -433,6 +472,8 @@ export const App = () => {
         return renderDashboard();
       case 'operacion':
         return renderOperacion();
+      case 'balance':
+        return renderBalance();
       case 'calendario':
         return renderCalendario();
       case 'configuracion':

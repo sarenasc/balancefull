@@ -1,0 +1,705 @@
+diff --git a/src/app/App.jsx b/src/app/App.jsx
+index 4c2c4de..c11e4a1 100644
+--- a/src/app/App.jsx
++++ b/src/app/App.jsx
+@@ -7,6 +7,7 @@ import { ConfigSummary } from '../features/config/ConfigSummary';
+ import { ConfigEditor } from '../features/config/ConfigEditor';
+ import { ProjectionPanel } from '../features/projection/ProjectionPanel';
+ import { createProjectionMetrics } from '../features/projection/projectionModel';
++import { BalanceBoard } from '../features/balance/BalanceBoard';
+ import { SchedulingSummary } from '../features/scheduling/SchedulingSummary';
+ import { TurnoDefinitionEditor } from '../features/scheduling/TurnoDefinitionEditor';
+ import { WeeklyScheduleEditor } from '../features/scheduling/WeeklyScheduleEditor';
+@@ -209,6 +210,12 @@ export const App = () => {
+           description:
+             'Edición rápida de cosecha, curado y proceso. Desde aquí nace la data base del balance.',
+         },
++        {
++          key: 'balance',
++          label: 'Balance',
++          icon: '📘',
++          description: 'Vista operacional por familia con cosecha, curado, proceso, horas y balance.',
++        },
+         {
+           key: 'dashboard',
+           label: 'Dashboard',
+@@ -354,6 +361,28 @@ export const App = () => {
+     </>
+   );
+ 
++  const renderBalance = () => (
++    <>
++      <div style={panelHintStyle}>
++        <div style={{ fontSize: '0.78rem', letterSpacing: '0.18em', color: '#64748b', textTransform: 'uppercase' }}>
++          Balance
++        </div>
++        <div style={{ marginTop: '0.35rem', fontSize: '0.95rem', color: '#334155' }}>
++          Balance operacional por familia. Aquí consolidamos cosecha, curado, proceso, horas requeridas y existencia futura.
++        </div>
++      </div>
++
++      <BalanceBoard
++        dates={dates}
++        familias={familias}
++        especies={especies}
++        entities={entities}
++        data={data}
++        curadoHoursConfig={curadoHoursConfig}
++        parametersBySpeciesId={parametersBySpeciesId}
++      />
++    </>
++  );
++
+   const renderCalendario = () => (
+     <>
+       <div style={panelHintStyle}>
+@@ -423,6 +452,8 @@ export const App = () => {
+         return renderDashboard();
+       case 'operacion':
+         return renderOperacion();
++      case 'balance':
++        return renderBalance();
+       case 'calendario':
+         return renderCalendario();
+       case 'configuracion':
+diff --git a/src/features/balance/BalanceBoard.jsx b/src/features/balance/BalanceBoard.jsx
+new file mode 100644
+index 0000000..d921111
+--- /dev/null
++++ b/src/features/balance/BalanceBoard.jsx
+@@ -0,0 +1,118 @@
++import { useEffect, useMemo, useState } from 'react';
++import { buildBalanceModel } from './balanceModel';
++import { BalanceFamilyTable } from './BalanceFamilyTable';
++
++const tabStyle = (active) => ({
++  padding: '0.75rem 1rem',
++  borderRadius: '12px',
++  border: active ? '1px solid #2563eb' : '1px solid #dbe4f0',
++  background: active ? '#eff6ff' : '#fff',
++  color: active ? '#2563eb' : '#0f172a',
++  fontWeight: 700,
++  cursor: 'pointer',
++});
++
++const summaryCardStyle = {
++  border: '1px solid #dbe4f0',
++  borderRadius: '12px',
++  background: '#fff',
++  padding: '1rem',
++  minWidth: '200px',
++};
++
++const formatNumber = (value, digits = 0) =>
++  Number(value || 0).toLocaleString('es-CL', {
++    minimumFractionDigits: digits,
++    maximumFractionDigits: digits,
++  });
++
++export const BalanceBoard = ({
++  dates,
++  familias,
++  especies,
++  entities,
++  data,
++  curadoHoursConfig,
++  parametersBySpeciesId,
++}) => {
++  const model = useMemo(
++    () =>
++      buildBalanceModel({
++        dates,
++        familias,
++        especies,
++        entities,
++        data,
++        curadoHoursConfig,
++        parametersBySpeciesId,
++      }),
++    [dates, familias, especies, entities, data, curadoHoursConfig, parametersBySpeciesId],
++  );
++
++  const familyTabs = model.families || [];
++  const [activeFamilyId, setActiveFamilyId] = useState(familyTabs[0]?.familyId ?? null);
++
++  useEffect(() => {
++    if (!familyTabs.length) {
++      setActiveFamilyId(null);
++      return;
++    }
++
++    const stillExists = familyTabs.some(
++      (item) => Number(item.familyId) === Number(activeFamilyId),
++    );
++
++    if (!stillExists) {
++      setActiveFamilyId(familyTabs[0].familyId);
++    }
++  }, [familyTabs, activeFamilyId]);
++
++  const activeFamily =
++    familyTabs.find((item) => Number(item.familyId) === Number(activeFamilyId)) ||
++    familyTabs[0] ||
++    null;
++
++  return (
++    <section className="panel">
++      <div className="panel-heading">
++        <div>
++          <p className="eyebrow">Balance</p>
++          <h2>Balance operacional por familia</h2>
++          <div style={{ marginTop: '0.35rem', color: '#64748b' }}>
++            Cosecha y proceso son manuales. Curado puede autogenerarse por horas configuradas y seguir editable.
++          </div>
++        </div>
++      </div>
++
++      {!familyTabs.length ? (
++        <div className="status-banner status-banner--warn">
++          No hay familias activas disponibles para construir balance.
++        </div>
++      ) : (
++        <>
++          <div
++            className="panel panel--compact"
++            style={{ marginBottom: '1rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}
++          >
++            {familyTabs.map((family) => (
++              <button
++                key={family.familyId}
++                type="button"
++                onClick={() => setActiveFamilyId(family.familyId)}
++                style={tabStyle(Number(activeFamilyId) === Number(family.familyId))}
++              >
++                {family.familyName}
++              </button>
++            ))}
++          </div>
++
++          {activeFamily ? (
++            <>
++              <div
++                className="panel panel--compact"
++                style={{ marginBottom: '1rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}
++              >
++                <div style={summaryCardStyle}><div className="stat-label">Familia</div><div style={{ marginTop: '0.45rem', fontWeight: 800, fontSize: '1.1rem' }}>{activeFamily.familyName}</div></div>
++                <div style={summaryCardStyle}><div className="stat-label">Proceso total</div><div style={{ marginTop: '0.45rem', fontWeight: 800, fontSize: '1.1rem' }}>{formatNumber(Object.values(activeFamily.totals?.totalProceso || {}).reduce((sum, value) => sum + Number(value || 0), 0))}</div></div>
++                <div style={summaryCardStyle}><div className="stat-label">Horas proceso</div><div style={{ marginTop: '0.45rem', fontWeight: 800, fontSize: '1.1rem' }}>{formatNumber(Object.values(activeFamily.totals?.totalHorasProceso || {}).reduce((sum, value) => sum + Number(value || 0), 0), 1)}</div></div>
++                <div style={summaryCardStyle}><div className="stat-label">Usa curado</div><div style={{ marginTop: '0.45rem', fontWeight: 800, fontSize: '1.1rem' }}>{activeFamily.usaCurado ? 'Sí' : 'No'}</div></div>
++              </div>
++              <BalanceFamilyTable family={activeFamily} />
++            </>
++          ) : null}
++        </>
++      )}
++    </section>
++  );
++};
+diff --git a/src/features/balance/BalanceFamilyTable.jsx b/src/features/balance/BalanceFamilyTable.jsx
+new file mode 100644
+index 0000000..c130001
+--- /dev/null
++++ b/src/features/balance/BalanceFamilyTable.jsx
+@@ -0,0 +1,211 @@
++const formatNumber = (value, digits = 0) => {
++  const safe = Number(value || 0);
++  return safe.toLocaleString('es-CL', {
++    minimumFractionDigits: digits,
++    maximumFractionDigits: digits,
++  });
++};
++
++const formatDateLabel = (value) =>
++  new Date(`${value}T12:00:00`).toLocaleDateString('es-CL', {
++    weekday: 'short',
++    day: '2-digit',
++    month: '2-digit',
++  });
++
++const sectionTitleStyle = {
++  background: '#0f62fe',
++  color: '#fff',
++  fontWeight: 800,
++  letterSpacing: '0.04em',
++};
++
++const subHeaderStyle = {
++  background: '#f8fafc',
++  color: '#334155',
++  fontWeight: 700,
++};
++
++const balanceValueStyle = (value) => {
++  if (value < 0) {
++    return {
++      color: '#dc2626',
++      fontWeight: 800,
++      background: '#fef2f2',
++    };
++  }
++
++  return {
++    color: '#0f172a',
++    fontWeight: 700,
++    background: '#f8fafc',
++  };
++};
++
++const renderRows = (rows, dates, options = {}) => {
++  const { showAutoHint = false } = options;
++
++  return rows.map((row) => (
++    <tr key={`${row.field}_${row.entityId}`}>
++      <td style={{ border: '1px solid #dbe4f0', padding: '0.45rem', background: '#fff' }}>
++        {row.planta}
++      </td>
++      <td style={{ border: '1px solid #dbe4f0', padding: '0.45rem', background: '#fff' }}>
++        {row.exportadora}
++      </td>
++      <td style={{ border: '1px solid #dbe4f0', padding: '0.45rem', background: '#fff' }}>
++        {row.especie}
++      </td>
++      <td style={{ border: '1px solid #dbe4f0', padding: '0.45rem', background: '#fff' }}>
++        {row.variedad}
++      </td>
++
++      {dates.map((date) => {
++        const value = Number(row.values?.[date] || 0);
++        const autoValue = Number(row.autoValues?.[date] || 0);
++
++        return (
++          <td
++            key={`${row.field}_${row.entityId}_${date}`}
++            style={{
++              border: '1px solid #dbe4f0',
++              padding: '0.45rem',
++              textAlign: 'right',
++              background: '#fff',
++            }}
++          >
++            <div>{formatNumber(value)}</div>
++            {showAutoHint && autoValue > 0 ? (
++              <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
++                auto: {formatNumber(autoValue)}
++              </div>
++            ) : null}
++          </td>
++        );
++      })}
++    </tr>
++  ));
++};
++
++const renderTotalRow = ({ label, dates, values, digits = 0, highlight = false }) => (
++  <tr>
++    <td
++      colSpan={4}
++      style={{
++        border: '1px solid #dbe4f0',
++        padding: '0.5rem',
++        fontWeight: 800,
++        background: highlight ? '#fef9c3' : '#eff6ff',
++      }}
++    >
++      {label}
++    </td>
++
++    {dates.map((date) => {
++      const value = Number(values?.[date] || 0);
++      return (
++        <td
++          key={`${label}_${date}`}
++          style={{
++            border: '1px solid #dbe4f0',
++            padding: '0.5rem',
++            textAlign: 'right',
++            fontWeight: 800,
++            background: highlight ? '#fef9c3' : '#eff6ff',
++          }}
++        >
++          {formatNumber(value, digits)}
++        </td>
++      );
++    })}
++  </tr>
++);
++
++export const BalanceFamilyTable = ({ family }) => {
++  if (!family) return null;
++
++  const { familyName, usaCurado, seasonStart, seasonEnd, dates, sections, totals } = family;
++
++  return (
++    <section className="panel">
++      <div className="panel-heading">
++        <div>
++          <p className="eyebrow">Balance</p>
++          <h2>{familyName}</h2>
++          <div style={{ color: '#64748b', marginTop: '0.35rem', fontSize: '0.9rem' }}>
++            Temporada: {seasonStart || '—'} → {seasonEnd || '—'} ·{' '}
++            {usaCurado ? 'usa curado' : 'sin curado'}
++          </div>
++        </div>
++      </div>
++
++      <div className="table-wrap" style={{ overflowX: 'auto' }}>
++        <table style={{ minWidth: '1400px', borderCollapse: 'collapse', width: '100%' }}>
++          <thead>
++            <tr>
++              <th style={{ border: '1px solid #dbe4f0', padding: '0.55rem', ...subHeaderStyle }}>Planta</th>
++              <th style={{ border: '1px solid #dbe4f0', padding: '0.55rem', ...subHeaderStyle }}>Exportadora</th>
++              <th style={{ border: '1px solid #dbe4f0', padding: '0.55rem', ...subHeaderStyle }}>Especie</th>
++              <th style={{ border: '1px solid #dbe4f0', padding: '0.55rem', ...subHeaderStyle }}>Variedad</th>
++
++              {dates.map((date) => (
++                <th
++                  key={date}
++                  style={{
++                    border: '1px solid #dbe4f0',
++                    padding: '0.55rem',
++                    minWidth: '105px',
++                    ...subHeaderStyle,
++                  }}
++                >
++                  <div style={{ textTransform: 'capitalize' }}>{formatDateLabel(date)}</div>
++                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.2rem' }}>
++                    {date}
++                  </div>
++                </th>
++              ))}
++            </tr>
++          </thead>
++
++          <tbody>
++            <tr>
++              <td colSpan={4 + dates.length} style={{ border: '1px solid #dbe4f0', padding: '0.65rem', ...sectionTitleStyle }}>
++                Cosechas
++              </td>
++            </tr>
++            {renderRows(sections.cosecha, dates)}
++
++            <tr>
++              <td colSpan={4 + dates.length} style={{ border: '1px solid #dbe4f0', padding: '0.65rem', ...sectionTitleStyle }}>
++                {usaCurado ? 'Curado / Liberación' : 'Curado (no aplica, editable si se requiere)'}
++              </td>
++            </tr>
++            {renderRows(sections.curado, dates, { showAutoHint: usaCurado })}
++
++            <tr>
++              <td colSpan={4 + dates.length} style={{ border: '1px solid #dbe4f0', padding: '0.65rem', ...sectionTitleStyle }}>
++                Procesos
++              </td>
++            </tr>
++            {renderRows(sections.proceso, dates)}
++
++            {renderTotalRow({
++              label: 'TOTAL PROCESOS',
++              dates,
++              values: totals.totalProceso,
++            })}
++
++            {renderTotalRow({
++              label: 'TOTAL HORAS PROCESO',
++              dates,
++              values: totals.totalHorasProceso,
++              digits: 1,
++              highlight: true,
++            })}
++
++            <tr>
++              <td colSpan={4 + dates.length} style={{ border: '1px solid #dbe4f0', padding: '0.65rem', ...sectionTitleStyle }}>
++                Balance
++              </td>
++            </tr>
++
++            {sections.balance.map((row) => (
++              <tr key={`balance_${row.entityId}`}>
++                <td style={{ border: '1px solid #dbe4f0', padding: '0.45rem', background: '#fff' }}>{row.planta}</td>
++                <td style={{ border: '1px solid #dbe4f0', padding: '0.45rem', background: '#fff' }}>{row.exportadora}</td>
++                <td style={{ border: '1px solid #dbe4f0', padding: '0.45rem', background: '#fff' }}>{row.especie}</td>
++                <td style={{ border: '1px solid #dbe4f0', padding: '0.45rem', background: '#fff' }}>{row.variedad}</td>
++                {dates.map((date) => <td key={`balance_${row.entityId}_${date}`} style={{ border: '1px solid #dbe4f0', padding: '0.45rem', textAlign: 'right', ...balanceValueStyle(Number(row.values?.[date] || 0)) }}>{formatNumber(Number(row.values?.[date] || 0))}</td>)}
++              </tr>
++            ))}
++
++            {renderTotalRow({ label: 'TOTAL BALANCE FAMILIA', dates, values: totals.totalBalance })}
++          </tbody>
++        </table>
++      </div>
++    </section>
++  );
++};
+diff --git a/src/features/balance/balanceModel.js b/src/features/balance/balanceModel.js
+new file mode 100644
+index 0000000..a2f0001
+--- /dev/null
++++ b/src/features/balance/balanceModel.js
+@@ -0,0 +1,240 @@
++const normalizeDate = (value) => {
++  if (!value) return null;
++  if (typeof value === 'string') return value.slice(0, 10);
++  return new Date(value).toISOString().slice(0, 10);
++};
++
++const addDays = (dateString, days) => {
++  const date = new Date(`${dateString}T12:00:00`);
++  date.setDate(date.getDate() + days);
++  return date.toISOString().slice(0, 10);
++};
++
++const safeNumber = (value) => {
++  const parsed = Number(value);
++  return Number.isFinite(parsed) ? parsed : 0;
++};
++
++const hoursToDays = (hours) => {
++  const safe = safeNumber(hours);
++  return Math.max(0, Math.ceil(safe / 24));
++};
++
++const getEntityLabel = (entity) =>
++  entity?.label ||
++  entity?.exportadora ||
++  entity?.nombre ||
++  `Exportadora ${entity?.id}`;
++
++const buildSpeciesMap = (especies = []) =>
++  new Map(especies.map((item) => [Number(item.id), item]));
++
++const buildFamilyDateRange = (familia, fallbackDates = []) => {
++  const start = normalizeDate(familia?.fecha_inicio) || fallbackDates[0] || null;
++  const end =
++    normalizeDate(familia?.fecha_fin) ||
++    fallbackDates[fallbackDates.length - 1] ||
++    start;
++
++  if (!start || !end) return fallbackDates;
++
++  const result = [];
++  let cursor = start;
++  let guard = 0;
++
++  while (cursor <= end && guard < 1200) {
++    result.push(cursor);
++    cursor = addDays(cursor, 1);
++    guard += 1;
++  }
++
++  return result;
++};
++
++const buildEntityFamilyMap = ({ entities = [], especies = [] }) => {
++  const speciesMap = buildSpeciesMap(especies);
++
++  return new Map(
++    entities.map((entity) => {
++      const especie = speciesMap.get(Number(entity.especie_id));
++      return [Number(entity.id), Number(especie?.familia_id ?? entity?.familia_id ?? 0)];
++    }),
++  );
++};
++
++const buildCuradoAutoMap = ({
++  familyEntities,
++  family,
++  familyDates,
++  data,
++  curadoHoursConfig,
++}) => {
++  const result = {};
++  const familyDateSet = new Set(familyDates);
++
++  familyEntities.forEach((entity) => {
++    const entityId = Number(entity.id);
++    result[entityId] = {};
++
++    familyDates.forEach((date) => {
++      result[entityId][date] = 0;
++    });
++
++    if (!family?.usa_curado) return;
++
++    familyDates.forEach((date) => {
++      const cosecha = safeNumber(data?.[entityId]?.[date]?.cosecha);
++      if (!cosecha) return;
++
++      const curadoHours = safeNumber(
++        curadoHoursConfig?.[entityId] ?? entity?.horas_curado ?? 0,
++      );
++
++      const releaseDate = addDays(date, hoursToDays(curadoHours));
++      if (!familyDateSet.has(releaseDate)) return;
++
++      result[entityId][releaseDate] += cosecha;
++    });
++  });
++
++  return result;
++};
++
++const buildFamilySections = ({
++  family,
++  familyDates,
++  familyEntities,
++  data,
++  curadoHoursConfig,
++  parametersBySpeciesId,
++}) => {
++  const curadoAutoMap = buildCuradoAutoMap({
++    familyEntities,
++    family,
++    familyDates,
++    data,
++    curadoHoursConfig,
++  });
++
++  const sections = {
++    cosecha: [],
++    curado: [],
++    proceso: [],
++    balance: [],
++  };
++
++  const totals = {
++    totalProceso: {},
++    totalHorasProceso: {},
++    totalBalance: {},
++  };
++
++  familyDates.forEach((date) => {
++    totals.totalProceso[date] = 0;
++    totals.totalHorasProceso[date] = 0;
++    totals.totalBalance[date] = 0;
++  });
++
++  familyEntities.forEach((entity) => {
++    const entityId = Number(entity.id);
++    const especieId = Number(entity.especie_id ?? 0);
++    const params =
++      parametersBySpeciesId?.get?.(especieId) ||
++      parametersBySpeciesId?.get?.(null) || {
++        bins_por_hora: 18,
++        horas_por_dia: 16,
++        kg_por_bin: 460,
++      };
++
++    const cosechaValues = {};
++    const curadoValues = {};
++    const procesoValues = {};
++    const balanceValues = {};
++
++    let runningBalance = 0;
++
++    familyDates.forEach((date) => {
++      const raw = data?.[entityId]?.[date] || {};
++
++      const cosecha = safeNumber(raw.cosecha);
++      const proceso = safeNumber(raw.proceso);
++      const curadoManual = raw.curado;
++      const curadoAuto = safeNumber(curadoAutoMap?.[entityId]?.[date]);
++
++      const curado =
++        curadoManual == null || curadoManual === ''
++          ? curadoAuto
++          : safeNumber(curadoManual);
++
++      cosechaValues[date] = cosecha;
++      curadoValues[date] = curado;
++      procesoValues[date] = proceso;
++
++      if (family?.usa_curado) {
++        runningBalance += curado - proceso;
++      } else {
++        runningBalance += cosecha - proceso;
++      }
++
++      balanceValues[date] = runningBalance;
++
++      totals.totalProceso[date] += proceso;
++      totals.totalHorasProceso[date] +=
++        proceso / Math.max(1, safeNumber(params.bins_por_hora || 18));
++      totals.totalBalance[date] += runningBalance;
++    });
++
++    const baseRow = {
++      entityId,
++      exportadora: getEntityLabel(entity),
++      especie: entity?.especie_nombre || entity?.especie || '',
++      variedad: entity?.variedad || '',
++      planta: entity?.planta || 'ALMAHUE',
++    };
++
++    sections.cosecha.push({
++      ...baseRow,
++      field: 'cosecha',
++      values: cosechaValues,
++    });
++
++    sections.curado.push({
++      ...baseRow,
++      field: 'curado',
++      values: curadoValues,
++      autoValues: curadoAutoMap?.[entityId] || {},
++    });
++
++    sections.proceso.push({
++      ...baseRow,
++      field: 'proceso',
++      values: procesoValues,
++    });
++
++    sections.balance.push({
++      ...baseRow,
++      field: 'balance',
++      values: balanceValues,
++    });
++  });
++
++  return { sections, totals };
++};
++
++export const buildBalanceModel = ({
++  dates = [],
++  familias = [],
++  especies = [],
++  entities = [],
++  data = {},
++  curadoHoursConfig = {},
++  parametersBySpeciesId,
++}) => {
++  const entityFamilyMap = buildEntityFamilyMap({ entities, especies });
++
++  const families = familias
++    .filter((familia) => Number(familia?.activa ?? 1) === 1)
++    .map((familia) => {
++      const familyId = Number(familia.id);
++      const familyDates = buildFamilyDateRange(familia, dates);
++
++      const familyEntities = entities.filter(
++        (entity) => Number(entityFamilyMap.get(Number(entity.id))) === familyId,
++      );
++
++      const { sections, totals } = buildFamilySections({
++        family: familia,
++        familyDates,
++        familyEntities,
++        data,
++        curadoHoursConfig,
++        parametersBySpeciesId,
++      });
++
++      return {
++        familyId,
++        familyName: familia.nombre,
++        usaCurado: Boolean(familia.usa_curado),
++        seasonStart: normalizeDate(familia.fecha_inicio),
++        seasonEnd: normalizeDate(familia.fecha_fin),
++        dates: familyDates,
++        entities: familyEntities,
++        sections,
++        totals,
++      };
++    });
++
++  return { families };
++};
