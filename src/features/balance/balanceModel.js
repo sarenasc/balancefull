@@ -29,6 +29,9 @@ const getEntityLabel = (entity) =>
 const buildSpeciesMap = (especies = []) =>
   new Map(especies.map((item) => [Number(item.id), item]));
 
+const getEntitySpeciesId = (entity) =>
+  Number(entity?.especieId ?? entity?.especie_id ?? 0);
+
 const buildFamilyDateRange = (familia, fallbackDates = []) => {
   const start = normalizeDate(familia?.fecha_inicio) || fallbackDates[0] || null;
   const end =
@@ -56,7 +59,7 @@ const buildEntityFamilyMap = ({ entities = [], especies = [] }) => {
 
   return new Map(
     entities.map((entity) => {
-      const especie = speciesMap.get(Number(entity.especie_id));
+      const especie = speciesMap.get(getEntitySpeciesId(entity));
       return [Number(entity.id), Number(especie?.familia_id ?? entity?.familia_id ?? 0)];
     }),
   );
@@ -137,7 +140,7 @@ const buildFamilySections = ({
 
   familyEntities.forEach((entity) => {
     const entityId = Number(entity.id);
-    const especieId = Number(entity.especie_id ?? 0);
+    const especieId = getEntitySpeciesId(entity);
     const params =
       parametersBySpeciesId?.get?.(especieId) ||
       parametersBySpeciesId?.get?.(null) || {
