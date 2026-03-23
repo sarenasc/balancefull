@@ -263,23 +263,6 @@ export const App = () => {
 
   const renderBalance = () => (
     <>
-      <div style={panelHintStyle}>
-        <div
-          style={{
-            fontSize: '0.78rem',
-            letterSpacing: '0.18em',
-            color: '#64748b',
-            textTransform: 'uppercase',
-          }}
-        >
-          Balance
-        </div>
-        <div style={{ marginTop: '0.35rem', fontSize: '0.95rem', color: '#334155' }}>
-          Balance operacional por familia. Aquí consolidamos cosecha, curado, proceso,
-          horas requeridas y existencia futura.
-        </div>
-      </div>
-
       <BalanceBoard
         dates={dates}
         familias={familias}

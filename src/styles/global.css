@@ -104,6 +104,12 @@ select {
   color: #9a6700;
 }
 
+.status-banner--danger {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
 .layout-grid {
   display: grid;
   gap: 1rem;

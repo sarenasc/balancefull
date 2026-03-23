@@ -2,14 +2,14 @@ export const StatusBanner = ({ source, error }) => {
   if (!error && source !== 'mock') {
     return (
       <div className="status-banner status-banner--ok">
-        Datos conectados desde la API configurada.
+        Conectado
       </div>
     );
   }
 
   return (
-    <div className="status-banner status-banner--warn">
-      {error ? `Modo degradado: ${error}` : 'Usando datos de ejemplo.'}
+    <div className="status-banner status-banner--danger">
+      No conectado
     </div>
   );
 };
