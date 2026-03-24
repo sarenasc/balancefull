@@ -409,7 +409,7 @@ export const BalanceFamilyTable = ({
       const ingresoWeek = usaCurado ? curadoWeek : cosechaWeek;
       const totalDisponible = openingBalance + ingresoWeek - procesoWeek;
       const baseDisponible = openingBalance + ingresoWeek;
-      const usagePercent = procesoWeek > 0 ? (baseDisponible / procesoWeek) * 100 : 0;
+      const usagePercent = procesoWeek > 0 ? (  procesoWeek / baseDisponible) * 100 : 0;
 
       return {
         exportadora,
