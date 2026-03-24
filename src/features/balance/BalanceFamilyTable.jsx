@@ -370,8 +370,10 @@ export const BalanceFamilyTable = ({
   const currentWeekLabel = formatWeekLabel(new Date().toISOString().slice(0, 10));
   const [hoveredSunday, setHoveredSunday] = useState(null);
   const [fitScale, setFitScale] = useState(1);
+  const [bottomTrackWidth, setBottomTrackWidth] = useState(0);
   const viewportRef = useRef(null);
   const contentRef = useRef(null);
+  const tableRef = useRef(null);
   const bottomScrollRef = useRef(null);
 
   const weeklySummary = useMemo(() => {
@@ -384,12 +386,17 @@ export const BalanceFamilyTable = ({
     const rows = sections.balance.map((balanceRow) => {
       const entityId = balanceRow.entityId;
       const exportadora = balanceRow.exportadora;
+      const cosechaRow = sections.cosecha.find((row) => row.entityId === entityId);
       const curadoRow = sections.curado.find((row) => row.entityId === entityId);
       const procesoRow = sections.proceso.find((row) => row.entityId === entityId);
 
       const openingBalanceDate = dates.filter((date) => date < start).slice(-1)[0];
       const openingBalance = Number(
         openingBalanceDate ? balanceRow.values?.[openingBalanceDate] || 0 : 0,
+      );
+      const cosechaWeek = weekDates.reduce(
+        (sum, date) => sum + Number(cosechaRow?.values?.[date] || 0),
+        0,
       );
       const curadoWeek = weekDates.reduce(
         (sum, date) => sum + Number(curadoRow?.values?.[date] || 0),
@@ -399,65 +406,70 @@ export const BalanceFamilyTable = ({
         (sum, date) => sum + Number(procesoRow?.values?.[date] || 0),
         0,
       );
-      const available = openingBalance + curadoWeek;
-      const endingBalance = Number(balanceRow.values?.[end] || 0);
-      const usagePercent = available > 0 ? (procesoWeek / available) * 100 : 0;
+      const ingresoWeek = usaCurado ? curadoWeek : cosechaWeek;
+      const totalDisponible = openingBalance + ingresoWeek - procesoWeek;
+      const baseDisponible = openingBalance + ingresoWeek;
+      const usagePercent = procesoWeek > 0 ? (baseDisponible / procesoWeek) * 100 : 0;
 
       return {
         exportadora,
         openingBalance,
+        cosechaWeek,
         curadoWeek,
         procesoWeek,
         usagePercent,
-        endingBalance,
+        totalDisponible,
       };
     });
 
     const totalsRow = rows.reduce(
       (acc, row) => ({
         openingBalance: acc.openingBalance + row.openingBalance,
+        cosechaWeek: acc.cosechaWeek + row.cosechaWeek,
         curadoWeek: acc.curadoWeek + row.curadoWeek,
         procesoWeek: acc.procesoWeek + row.procesoWeek,
-        endingBalance: acc.endingBalance + row.endingBalance,
+        totalDisponible: acc.totalDisponible + row.totalDisponible,
       }),
-      { openingBalance: 0, curadoWeek: 0, procesoWeek: 0, endingBalance: 0 },
+      { openingBalance: 0, cosechaWeek: 0, curadoWeek: 0, procesoWeek: 0, totalDisponible: 0 },
     );
 
-    const totalAvailable = totalsRow.openingBalance + totalsRow.curadoWeek;
-    const usagePercent = totalAvailable > 0 ? (totalsRow.procesoWeek / totalAvailable) * 100 : 0;
+    const weeklyTurnoHours = weekDates.reduce(
+      (sum, date) => sum + Number(totals.totalHorasProceso?.[date] || 0),
+      0,
+    );
+    const usagePercent = (weeklyTurnoHours / (24 * 6)) * 100;
 
     return {
       title: `Balance ${formatWeekLabel(hoveredSunday)} — ${formatShortDisplayDate(hoveredSunday)}`,
       rows,
-      totalAvailable,
       totalsRow,
       usagePercent,
     };
-  }, [dates, hoveredSunday, sections.balance, sections.curado, sections.proceso]);
+  }, [dates, hoveredSunday, sections.balance, sections.curado, sections.proceso, totals]);
 
   useLayoutEffect(() => {
-    if (!isFullscreen) {
-      setFitScale(1);
-      return;
-    }
+  if (!isFullscreen) {
+    setFitScale(1);
+    return;
+  }
 
-    const updateScale = () => {
-      const viewport = viewportRef.current;
-      const content = contentRef.current;
-      if (!viewport || !content) return;
+  const updateScale = () => {
+    const viewport = viewportRef.current;
+    const content = contentRef.current;
+    if (!viewport || !content) return;
 
-      const availableHeight = viewport.clientHeight - 12;
-      const realHeight = content.scrollHeight;
-      if (!availableHeight || !realHeight) return;
+    const availableHeight = viewport.clientHeight - 12;
+    const realHeight = content.scrollHeight;
+    if (!availableHeight || !realHeight) return;
 
-      const nextScale = Math.min(1, availableHeight / realHeight);
-      setFitScale(nextScale > 0 ? nextScale : 1);
-    };
+    const nextScale = Math.min(1, availableHeight / realHeight);
+    setFitScale(nextScale > 0 ? nextScale : 1);
+  };
 
-    updateScale();
-    window.addEventListener('resize', updateScale);
-    return () => window.removeEventListener('resize', updateScale);
-  }, [isFullscreen, dates.length, sections]);
+  updateScale();
+  window.addEventListener('resize', updateScale);
+  return () => window.removeEventListener('resize', updateScale);
+}, [isFullscreen, dates.length]);
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
@@ -488,6 +500,24 @@ export const BalanceFamilyTable = ({
       bottom.removeEventListener('scroll', syncFromBottom);
     };
   }, [isFullscreen, fitScale, dates.length]);
+
+  useLayoutEffect(() => {
+    if (!isFullscreen) {
+      setBottomTrackWidth(0);
+      return;
+    }
+
+    const updateBottomTrack = () => {
+      const viewport = viewportRef.current;
+      const table = tableRef.current;
+      if (!viewport || !table) return;
+      setBottomTrackWidth(Math.max(viewport.scrollWidth, table.scrollWidth, 1));
+    };
+
+    updateBottomTrack();
+    window.addEventListener('resize', updateBottomTrack);
+    return () => window.removeEventListener('resize', updateBottomTrack);
+  }, [isFullscreen, fitScale, dates.length, sections]);
 
   return (
     <section
@@ -556,12 +586,12 @@ export const BalanceFamilyTable = ({
         <div
           ref={contentRef}
           style={{
-            transform: `scale(${fitScale})`,
-            transformOrigin: 'top left',
-            width: fitScale < 1 ? `${100 / fitScale}%` : '100%',
+            zoom: isFullscreen ? fitScale : 1,
+            width: isFullscreen && fitScale < 1 ? `${100 / fitScale}%` : '100%',
           }}
         >
           <table
+            ref={tableRef}
             style={{
               minWidth: `${530 + dates.length * 78}px`,
               borderCollapse: 'separate',
@@ -787,7 +817,7 @@ export const BalanceFamilyTable = ({
                 <tr>
                   <th style={{ background: '#fff', borderBottom: '1px solid #dbe4f0', padding: '0.25rem', textTransform: 'none' }}>Exportadora</th>
                   <th style={{ background: '#fff', borderBottom: '1px solid #dbe4f0', padding: '0.25rem', textTransform: 'none' }}>Inicio sem.</th>
-                  <th style={{ background: '#fff', borderBottom: '1px solid #dbe4f0', padding: '0.25rem', textTransform: 'none' }}>S. Curado</th>
+                  <th style={{ background: '#fff', borderBottom: '1px solid #dbe4f0', padding: '0.25rem', textTransform: 'none' }}>{usaCurado ? 'Curado' : 'Cosecha'}</th>
                   <th style={{ background: '#fff', borderBottom: '1px solid #dbe4f0', padding: '0.25rem', textTransform: 'none' }}>Proceso</th>
                   <th style={{ background: '#fff', borderBottom: '1px solid #dbe4f0', padding: '0.25rem', textTransform: 'none' }}>%</th>
                   <th style={{ background: '#fff', borderBottom: '1px solid #dbe4f0', padding: '0.25rem', textTransform: 'none' }}>Fin sem.</th>
@@ -798,12 +828,12 @@ export const BalanceFamilyTable = ({
                   <tr key={row.exportadora}>
                     <td style={{ padding: '0.2rem 0.25rem', borderBottom: 'none', color: '#0f172a' }}>{row.exportadora}</td>
                     <td style={{ padding: '0.2rem 0.25rem', borderBottom: 'none', textAlign: 'right' }}>{formatCellValue(row.openingBalance)}</td>
-                    <td style={{ padding: '0.2rem 0.25rem', borderBottom: 'none', textAlign: 'right', color: '#7c3aed' }}>{formatCellValue(row.curadoWeek)}</td>
+                    <td style={{ padding: '0.2rem 0.25rem', borderBottom: 'none', textAlign: 'right', color: '#7c3aed' }}>{formatCellValue(usaCurado ? row.curadoWeek : row.cosechaWeek)}</td>
                     <td style={{ padding: '0.2rem 0.25rem', borderBottom: 'none', textAlign: 'right', color: '#f97316' }}>{formatCellValue(row.procesoWeek)}</td>
                     <td style={{ padding: '0.2rem 0.25rem', borderBottom: 'none', textAlign: 'right', color: '#64748b' }}>
-                      {row.usagePercent > 0 ? `${Math.round(row.usagePercent)}%` : '0%'}
+                      {`${row.usagePercent.toFixed(1)}%`}
                     </td>
-                    <td style={{ padding: '0.2rem 0.25rem', borderBottom: 'none', textAlign: 'right', color: '#10b981' }}>{formatCellValue(row.endingBalance)}</td>
+                    <td style={{ padding: '0.2rem 0.25rem', borderBottom: 'none', textAlign: 'right', color: '#10b981' }}>{formatCellValue(row.totalDisponible)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -812,7 +842,7 @@ export const BalanceFamilyTable = ({
             <div style={{ marginTop: '0.55rem', borderTop: '1px solid #dbe4f0', paddingTop: '0.55rem', display: 'grid', gridTemplateColumns: 'repeat(4, auto)', gap: '1rem' }}>
               <div>
                 <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase' }}>Total disp.</div>
-                <div style={{ fontSize: '1.2rem', color: '#0f172a' }}>{formatCellValue(weeklySummary.totalAvailable)}</div>
+                <div style={{ fontSize: '1.2rem', color: '#0f172a' }}>{formatCellValue(weeklySummary.totalsRow.totalDisponible)}</div>
               </div>
               <div>
                 <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase' }}>Proceso</div>
@@ -821,12 +851,12 @@ export const BalanceFamilyTable = ({
               <div>
                 <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase' }}>% uso línea</div>
                 <div style={{ fontSize: '1rem', color: '#64748b' }}>
-                  {weeklySummary.usagePercent > 0 ? `${Math.round(weeklySummary.usagePercent)}%` : '0%'}
+                  {`${weeklySummary.usagePercent.toFixed(1)}%`}
                 </div>
               </div>
               <div>
                 <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase' }}>Saldo dom.</div>
-                <div style={{ fontSize: '1.2rem', color: '#10b981' }}>{formatCellValue(weeklySummary.totalsRow.endingBalance)}</div>
+                <div style={{ fontSize: '1.2rem', color: '#10b981' }}>{formatCellValue(weeklySummary.totalsRow.totalDisponible)}</div>
               </div>
             </div>
           </div>
@@ -842,11 +872,14 @@ export const BalanceFamilyTable = ({
             overflowY: 'hidden',
             marginTop: '0.35rem',
             paddingBottom: '0.1rem',
+            height: '22px',
+            borderRadius: '999px',
+            background: '#cbd5e1',
           }}
         >
           <div
             style={{
-              width: `${(530 + dates.length * 78) * fitScale}px`,
+              width: `${Math.max(bottomTrackWidth, 1)}px`,
               height: '1px',
             }}
           />
