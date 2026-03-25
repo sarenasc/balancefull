@@ -48,6 +48,7 @@ export const App = () => {
   const [curadoHoursConfig, setCuradoHoursConfig] = useState({});
   const [turnosDefinicion, setTurnosDefinicion] = useState([]);
   const [tiposRestriccion, setTiposRestriccion] = useState([]);
+  const [parametrosDia, setParametrosDia] = useState([]);
   const [data, setData] = useState({});
   const [defaultParameters, setDefaultParameters] = useState({
     especie_id: null,
@@ -146,6 +147,21 @@ export const App = () => {
     loadTiposRestriccion();
   }, []);
 
+  useEffect(() => {
+    const loadParametrosDia = async () => {
+      try {
+        const response = await fetch(`${appConfig.apiBaseUrl}/parametros-dia`);
+        if (!response.ok) throw new Error('No fue posible cargar parámetros por día');
+        const rows = await response.json();
+        setParametrosDia(Array.isArray(rows) ? rows : []);
+      } catch (_error) {
+        setParametrosDia([]);
+      }
+    };
+
+    loadParametrosDia();
+  }, []);
+
   const familyBySpeciesId = useMemo(() => {
     const familyMap = new Map(familias.map((family) => [Number(family.id), family]));
     return new Map(
@@ -184,8 +200,9 @@ export const App = () => {
         data,
         familyBySpeciesId,
         parametersBySpeciesId,
+        parametrosDia,
       }),
-    [dates, entities, data, familyBySpeciesId, parametersBySpeciesId],
+    [dates, entities, data, familyBySpeciesId, parametersBySpeciesId, parametrosDia],
   );
 
   const navSections = [
@@ -262,20 +279,19 @@ export const App = () => {
   );
 
   const renderBalance = () => (
-    <>
-      <BalanceBoard
-        dates={dates}
-        familias={familias}
-        especies={especies}
-        entities={entities}
-        data={data}
-        setData={setData}
-        holidays={holidays}
-        temporadaId={temporadaId}
-        curadoHoursConfig={curadoHoursConfig}
-        parametersBySpeciesId={parametersBySpeciesId}
-      />
-    </>
+    <BalanceBoard
+      dates={dates}
+      familias={familias}
+      especies={especies}
+      entities={entities}
+      data={data}
+      setData={setData}
+      holidays={holidays}
+      temporadaId={temporadaId}
+      curadoHoursConfig={curadoHoursConfig}
+      parametersBySpeciesId={parametersBySpeciesId}
+      parametrosDia={parametrosDia}
+    />
   );
 
   const renderCalendario = () => (
@@ -308,33 +324,22 @@ export const App = () => {
   );
 
   const renderConfiguracion = () => (
-    <>
-      <div style={panelHintStyle}>
-        <div style={{ fontSize: '0.78rem', letterSpacing: '0.18em', color: '#64748b', textTransform: 'uppercase' }}>
-          Configuración
-        </div>
-        <div style={{ marginTop: '0.35rem', fontSize: '0.95rem', color: '#334155' }}>
-          Ajustes base del sistema: especies, familias, feriados, parámetros generales y horas de curado.
-        </div>
-      </div>
-
-      <ConfigEditor
-        entities={entities}
-        setEntities={setEntities}
-        defaultParameters={defaultParameters}
-        setDefaultParameters={setDefaultParameters}
-        familias={familias}
-        setFamilias={setFamilias}
-        especies={especies}
-        setEspecies={setEspecies}
-        parametrosEspecie={parametrosEspecie}
-        setParametrosEspecie={setParametrosEspecie}
-        holidays={holidays}
-        setHolidays={setHolidays}
-        curadoHoursConfig={curadoHoursConfig}
-        setCuradoHoursConfig={setCuradoHoursConfig}
-      />
-    </>
+    <ConfigEditor
+      entities={entities}
+      setEntities={setEntities}
+      defaultParameters={defaultParameters}
+      setDefaultParameters={setDefaultParameters}
+      familias={familias}
+      setFamilias={setFamilias}
+      especies={especies}
+      setEspecies={setEspecies}
+      parametrosEspecie={parametrosEspecie}
+      setParametrosEspecie={setParametrosEspecie}
+      holidays={holidays}
+      setHolidays={setHolidays}
+      curadoHoursConfig={curadoHoursConfig}
+      setCuradoHoursConfig={setCuradoHoursConfig}
+    />
   );
 
   const renderActiveView = () => {
@@ -368,3 +373,5 @@ export const App = () => {
     </AppShell>
   );
 };
+
+export default App;

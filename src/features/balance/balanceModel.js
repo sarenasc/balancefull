@@ -94,6 +94,14 @@ const buildCuradoAutoMap = ({
   return result;
 };
 
+const buildDailyBinsMap = (parametrosDia = []) =>
+  new Map(
+    parametrosDia.map((item) => [
+      `${Number(item.exportadora_id)}|${normalizeDate(item.fecha)}`,
+      safeNumber(item.bins_por_hora),
+    ]),
+  );
+
 const buildFamilySections = ({
   family,
   familyDates,
@@ -101,6 +109,7 @@ const buildFamilySections = ({
   data,
   curadoHoursConfig,
   parametersBySpeciesId,
+  parametrosDia,
 }) => {
   const curadoAutoMap = buildCuradoAutoMap({
     familyEntities,
@@ -109,6 +118,7 @@ const buildFamilySections = ({
     data,
     curadoHoursConfig,
   });
+  const dailyBinsMap = buildDailyBinsMap(parametrosDia);
 
   const sections = {
     cosecha: [],
@@ -172,9 +182,12 @@ const buildFamilySections = ({
 
       balanceValues[date] = runningBalance;
 
+      const binsPorHoraDia =
+        dailyBinsMap.get(`${entityId}|${date}`) ??
+        Math.max(1, safeNumber(params.bins_por_hora || 18));
+
       totals.totalProceso[date] += proceso;
-      totals.totalHorasProceso[date] +=
-        proceso / Math.max(1, safeNumber(params.bins_por_hora || 18));
+      totals.totalHorasProceso[date] += proceso / Math.max(1, binsPorHoraDia);
       totals.totalBalance[date] += runningBalance;
     });
 
@@ -223,6 +236,7 @@ export const buildBalanceModel = ({
   data = {},
   curadoHoursConfig = {},
   parametersBySpeciesId,
+  parametrosDia = [],
 }) => {
   const entityFamilyMap = buildEntityFamilyMap({ entities, especies });
 
@@ -243,6 +257,7 @@ export const buildBalanceModel = ({
         data,
         curadoHoursConfig,
         parametersBySpeciesId,
+        parametrosDia,
       });
 
       return {
@@ -258,5 +273,8 @@ export const buildBalanceModel = ({
       };
     });
 
-  return { families };
+  return {
+    generatedAt: new Date().toISOString(),
+    families,
+  };
 };

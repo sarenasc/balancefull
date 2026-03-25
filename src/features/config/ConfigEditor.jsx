@@ -3,6 +3,27 @@ import { useConfigEditor } from './useConfigEditor';
 import { useCatalogEditor } from './useCatalogEditor';
 import { useHolidayEditor } from './useHolidayEditor';
 import { useCuradoHoursEditor } from './useCuradoHoursEditor';
+import ConfigSubMenu from './ConfigSubMenu';
+import ParametrosDiaEditor from './ParametrosDiaEditor';
+import TemporadasEditor from './TemporadasEditor';
+
+const inputStyle = {
+  width: '100%',
+  marginTop: '0.4rem',
+  padding: '0.6rem',
+  borderRadius: '10px',
+  border: '1px solid #cbd5e1',
+};
+
+const primaryButtonStyle = {
+  marginTop: '1rem',
+  padding: '0.75rem 1rem',
+  borderRadius: '12px',
+  border: 'none',
+  background: '#0f62fe',
+  color: '#fff',
+  cursor: 'pointer',
+};
 
 export const ConfigEditor = ({
   entities,
@@ -20,6 +41,7 @@ export const ConfigEditor = ({
   curadoHoursConfig,
   setCuradoHoursConfig,
 }) => {
+  const [activeTab, setActiveTab] = useState('parametros');
   const [form, setForm] = useState({
     bins_por_hora: defaultParameters?.bins_por_hora ?? 18,
     horas_por_dia: defaultParameters?.horas_por_dia ?? 16,
@@ -79,10 +101,7 @@ export const ConfigEditor = ({
   useEffect(() => {
     const map = {};
     entities.forEach((entity) => {
-      map[entity.id] =
-        curadoHoursConfig?.[entity.id] ??
-        entity.horas_curado ??
-        48;
+      map[entity.id] = curadoHoursConfig?.[entity.id] ?? entity.horas_curado ?? 48;
     });
     setCuradoForms(map);
   }, [entities, curadoHoursConfig]);
@@ -149,24 +168,12 @@ export const ConfigEditor = ({
     });
   }, [especies, familias]);
 
-  return (
-    <section className="panel">
-      <div className="panel-heading">
-        <div>
-          <p className="eyebrow">Configuración</p>
-          <h2>Visibilidad, familias, especies, parámetros, feriados y curado</h2>
-        </div>
-      </div>
+  const entidadesCurado = useMemo(() => {
+    return entities.filter((entity) => String(entity?.especie || '').trim().toUpperCase() === 'KIWI');
+  }, [entities]);
 
-      {error ? <div className="status-banner status-banner--warn">{error}</div> : null}
-      {success ? <div className="status-banner status-banner--ok">{success}</div> : null}
-      {catalogError ? <div className="status-banner status-banner--warn">{catalogError}</div> : null}
-      {catalogSuccess ? <div className="status-banner status-banner--ok">{catalogSuccess}</div> : null}
-      {holidayError ? <div className="status-banner status-banner--warn">{holidayError}</div> : null}
-      {holidaySuccess ? <div className="status-banner status-banner--ok">{holidaySuccess}</div> : null}
-      {curadoError ? <div className="status-banner status-banner--warn">{curadoError}</div> : null}
-      {curadoSuccess ? <div className="status-banner status-banner--ok">{curadoSuccess}</div> : null}
-
+  const renderParametros = () => (
+    <>
       <div className="panel panel--compact" style={{ marginBottom: '1rem' }}>
         <div className="panel-heading">
           <div>
@@ -194,13 +201,7 @@ export const ConfigEditor = ({
                   bins_por_hora: event.target.value,
                 }))
               }
-              style={{
-                width: '100%',
-                marginTop: '0.4rem',
-                padding: '0.6rem',
-                borderRadius: '10px',
-                border: '1px solid #cbd5e1',
-              }}
+              style={inputStyle}
             />
           </label>
 
@@ -216,13 +217,7 @@ export const ConfigEditor = ({
                   horas_por_dia: event.target.value,
                 }))
               }
-              style={{
-                width: '100%',
-                marginTop: '0.4rem',
-                padding: '0.6rem',
-                borderRadius: '10px',
-                border: '1px solid #cbd5e1',
-              }}
+              style={inputStyle}
             />
           </label>
 
@@ -238,30 +233,12 @@ export const ConfigEditor = ({
                   kg_por_bin: event.target.value,
                 }))
               }
-              style={{
-                width: '100%',
-                marginTop: '0.4rem',
-                padding: '0.6rem',
-                borderRadius: '10px',
-                border: '1px solid #cbd5e1',
-              }}
+              style={inputStyle}
             />
           </label>
         </div>
 
-        <button
-          onClick={() => saveDefaultConfig(form)}
-          disabled={saving}
-          style={{
-            marginTop: '1rem',
-            padding: '0.75rem 1rem',
-            borderRadius: '12px',
-            border: 'none',
-            background: '#0f62fe',
-            color: '#fff',
-            cursor: 'pointer',
-          }}
-        >
+        <button onClick={() => saveDefaultConfig(form)} disabled={saving} style={primaryButtonStyle}>
           {saving ? 'Guardando...' : 'Guardar configuración base'}
         </button>
       </div>
@@ -312,7 +289,7 @@ export const ConfigEditor = ({
                             },
                           }))
                         }
-                        style={{ width: '100%', padding: '0.5rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
+                        style={{ ...inputStyle, marginTop: 0, padding: '0.5rem' }}
                       />
                     </td>
                     <td>
@@ -329,7 +306,7 @@ export const ConfigEditor = ({
                             },
                           }))
                         }
-                        style={{ width: '100%', padding: '0.5rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
+                        style={{ ...inputStyle, marginTop: 0, padding: '0.5rem' }}
                       />
                     </td>
                     <td>
@@ -346,7 +323,7 @@ export const ConfigEditor = ({
                             },
                           }))
                         }
-                        style={{ width: '100%', padding: '0.5rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
+                        style={{ ...inputStyle, marginTop: 0, padding: '0.5rem' }}
                       />
                     </td>
                     <td>
@@ -365,158 +342,177 @@ export const ConfigEditor = ({
                   </tr>
                 );
               })}
+              {!especiesConFamilia.length ? (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: 'center', color: '#64748b' }}>
+                    No hay especies cargadas.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
       </div>
+    </>
+  );
 
-      <div className="panel panel--compact" style={{ marginBottom: '1rem' }}>
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">Feriados</p>
-            <h2>Calendario operativo</h2>
-          </div>
+  const renderCalendario = () => (
+    <div className="panel panel--compact" style={{ marginBottom: '1rem' }}>
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Feriados</p>
+          <h2>Calendario operativo</h2>
         </div>
+      </div>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr auto',
-            gap: '0.75rem',
-            alignItems: 'end',
-            marginBottom: '1rem',
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr auto',
+          gap: '0.75rem',
+          alignItems: 'end',
+          marginBottom: '1rem',
+        }}
+      >
+        <label>
+          <div className="stat-label">Fecha</div>
+          <input
+            type="date"
+            value={newHoliday.fecha}
+            onChange={(event) =>
+              setNewHoliday((current) => ({ ...current, fecha: event.target.value }))
+            }
+            style={inputStyle}
+          />
+        </label>
+
+        <label>
+          <div className="stat-label">Nombre (opcional)</div>
+          <input
+            value={newHoliday.nombre}
+            onChange={(event) =>
+              setNewHoliday((current) => ({ ...current, nombre: event.target.value }))
+            }
+            style={inputStyle}
+          />
+        </label>
+
+        <button
+          disabled={holidaySaving}
+          onClick={async () => {
+            const ok = await addHoliday(newHoliday);
+            if (ok) {
+              setNewHoliday({ fecha: '', nombre: '' });
+            }
           }}
+          style={primaryButtonStyle}
         >
-          <label>
-            <div className="stat-label">Fecha</div>
-            <input
-              type="date"
-              value={newHoliday.fecha}
-              onChange={(event) =>
-                setNewHoliday((current) => ({ ...current, fecha: event.target.value }))
-              }
-              style={{ width: '100%', marginTop: '0.4rem', padding: '0.6rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
-            />
-          </label>
+          Agregar feriado
+        </button>
+      </div>
 
-          <label>
-            <div className="stat-label">Nombre (opcional)</div>
-            <input
-              value={newHoliday.nombre}
-              onChange={(event) =>
-                setNewHoliday((current) => ({ ...current, nombre: event.target.value }))
-              }
-              style={{ width: '100%', marginTop: '0.4rem', padding: '0.6rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
-            />
-          </label>
-
-          <button
-            disabled={holidaySaving}
-            onClick={async () => {
-              const ok = await addHoliday(newHoliday);
-              if (ok) {
-                setNewHoliday({ fecha: '', nombre: '' });
-              }
-            }}
-            style={{
-              padding: '0.75rem 1rem',
-              borderRadius: '12px',
-              border: 'none',
-              background: '#0f62fe',
-              color: '#fff',
-              cursor: 'pointer',
-            }}
-          >
-            Agregar feriado
-          </button>
-        </div>
-
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Acción</th>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            {holidays.map((holiday) => (
+              <tr key={holiday}>
+                <td>{holiday}</td>
+                <td>
+                  <button disabled={holidaySaving} onClick={() => deleteHoliday(holiday)}>
+                    Eliminar
+                  </button>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {holidays.map((holiday) => (
-                <tr key={holiday}>
-                  <td>{holiday}</td>
-                  <td>
-                    <button
-                      disabled={holidaySaving}
-                      onClick={() => deleteHoliday(holiday)}
-                    >
-                      Eliminar
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            ))}
+            {!holidays.length ? (
+              <tr>
+                <td colSpan="2" style={{ textAlign: 'center', color: '#64748b' }}>
+                  No hay feriados cargados.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const renderCurado = () => (
+    <div className="panel panel--compact" style={{ marginBottom: '1rem' }}>
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Horas de curado</p>
+          <h2>Configuración por exportadora</h2>
         </div>
       </div>
 
-      <div className="panel panel--compact" style={{ marginBottom: '1rem' }}>
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">Horas de curado</p>
-            <h2>Configuración por exportadora</h2>
-          </div>
-        </div>
-
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Exportadora</th>
-                <th>Especie</th>
-                <th>Variedad</th>
-                <th>Horas curado</th>
-                <th>Acción</th>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Exportadora</th>
+              <th>Especie</th>
+              <th>Variedad</th>
+              <th>Horas curado</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entidadesCurado.map((entity) => (
+              <tr key={entity.id}>
+                <td>{entity.exportadora}</td>
+                <td>{entity.especie}</td>
+                <td>{entity.variedad || '—'}</td>
+                <td>
+                  <input
+                    type="number"
+                    min="1"
+                    value={curadoForms[entity.id] ?? 48}
+                    onChange={(event) =>
+                      setCuradoForms((current) => ({
+                        ...current,
+                        [entity.id]: event.target.value,
+                      }))
+                    }
+                    style={{ ...inputStyle, marginTop: 0, padding: '0.5rem' }}
+                  />
+                </td>
+                <td>
+                  <button
+                    disabled={curadoSaving}
+                    onClick={() =>
+                      saveCuradoHours({
+                        exportadoraId: entity.id,
+                        horasCurado: curadoForms[entity.id],
+                      })
+                    }
+                  >
+                    Guardar
+                  </button>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {entities.map((entity) => (
-                <tr key={entity.id}>
-                  <td>{entity.exportadora}</td>
-                  <td>{entity.especie}</td>
-                  <td>{entity.variedad || '—'}</td>
-                  <td>
-                    <input
-                      type="number"
-                      min="1"
-                      value={curadoForms[entity.id] ?? 48}
-                      onChange={(event) =>
-                        setCuradoForms((current) => ({
-                          ...current,
-                          [entity.id]: event.target.value,
-                        }))
-                      }
-                      style={{ width: '100%', padding: '0.5rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
-                    />
-                  </td>
-                  <td>
-                    <button
-                      disabled={curadoSaving}
-                      onClick={() =>
-                        saveCuradoHours({
-                          exportadoraId: entity.id,
-                          horasCurado: curadoForms[entity.id],
-                        })
-                      }
-                    >
-                      Guardar
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+            {!entidadesCurado.length ? (
+              <tr>
+                <td colSpan="5" style={{ textAlign: 'center', color: '#64748b' }}>
+                  No hay exportadoras de kiwi para configurar curado.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
       </div>
+    </div>
+  );
 
+  const renderCatalogos = () => (
+    <>
       <div className="panel panel--compact" style={{ marginBottom: '1rem' }}>
         <div className="panel-heading">
           <div>
@@ -541,7 +537,7 @@ export const ConfigEditor = ({
               onChange={(event) =>
                 setNewFamilia((current) => ({ ...current, nombre: event.target.value }))
               }
-              style={{ width: '100%', marginTop: '0.4rem', padding: '0.6rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
+              style={inputStyle}
             />
           </label>
 
@@ -553,7 +549,7 @@ export const ConfigEditor = ({
               onChange={(event) =>
                 setNewFamilia((current) => ({ ...current, orden: event.target.value }))
               }
-              style={{ width: '100%', marginTop: '0.4rem', padding: '0.6rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
+              style={inputStyle}
             />
           </label>
 
@@ -576,14 +572,7 @@ export const ConfigEditor = ({
                 setNewFamilia({ nombre: '', usa_curado: false, orden: 0 });
               }
             }}
-            style={{
-              padding: '0.75rem 1rem',
-              borderRadius: '12px',
-              border: 'none',
-              background: '#0f62fe',
-              color: '#fff',
-              cursor: 'pointer',
-            }}
+            style={primaryButtonStyle}
           >
             Crear familia
           </button>
@@ -612,7 +601,7 @@ export const ConfigEditor = ({
                           onChange={(event) =>
                             setEditingFamilia((current) => ({ ...current, nombre: event.target.value }))
                           }
-                          style={{ width: '100%', padding: '0.5rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
+                          style={{ ...inputStyle, marginTop: 0, padding: '0.5rem' }}
                         />
                       ) : (
                         familia.nombre
@@ -626,7 +615,7 @@ export const ConfigEditor = ({
                           onChange={(event) =>
                             setEditingFamilia((current) => ({ ...current, orden: event.target.value }))
                           }
-                          style={{ width: '100%', padding: '0.5rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
+                          style={{ ...inputStyle, marginTop: 0, padding: '0.5rem' }}
                         />
                       ) : (
                         familia.orden
@@ -653,23 +642,18 @@ export const ConfigEditor = ({
                                 ...familia,
                                 ...editingFamilia,
                               });
-                              if (ok) {
-                                setEditingFamiliaId(null);
-                              }
+                              if (ok) setEditingFamiliaId(null);
                             }}
                           >
                             Guardar
                           </button>
-                          <button
-                            onClick={() => {
-                              setEditingFamiliaId(null);
-                            }}
-                          >
+                          <button type="button" onClick={() => setEditingFamiliaId(null)}>
                             Cancelar
                           </button>
                         </div>
                       ) : (
                         <button
+                          type="button"
                           onClick={() => {
                             setEditingFamiliaId(familia.id);
                             setEditingFamilia({
@@ -686,6 +670,13 @@ export const ConfigEditor = ({
                   </tr>
                 );
               })}
+              {!familias.length ? (
+                <tr>
+                  <td colSpan="4" style={{ textAlign: 'center', color: '#64748b' }}>
+                    No hay familias cargadas.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
@@ -715,7 +706,7 @@ export const ConfigEditor = ({
               onChange={(event) =>
                 setNewEspecie((current) => ({ ...current, nombre: event.target.value }))
               }
-              style={{ width: '100%', marginTop: '0.4rem', padding: '0.6rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
+              style={inputStyle}
             />
           </label>
 
@@ -726,7 +717,7 @@ export const ConfigEditor = ({
               onChange={(event) =>
                 setNewEspecie((current) => ({ ...current, familia_id: event.target.value }))
               }
-              style={{ width: '100%', marginTop: '0.4rem', padding: '0.6rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
+              style={inputStyle}
             >
               <option value="">Selecciona una familia</option>
               {familias.map((familia) => (
@@ -745,14 +736,7 @@ export const ConfigEditor = ({
                 setNewEspecie({ nombre: '', familia_id: '' });
               }
             }}
-            style={{
-              padding: '0.75rem 1rem',
-              borderRadius: '12px',
-              border: 'none',
-              background: '#0f62fe',
-              color: '#fff',
-              cursor: 'pointer',
-            }}
+            style={primaryButtonStyle}
           >
             Crear especie
           </button>
@@ -773,17 +757,32 @@ export const ConfigEditor = ({
                   <td>{species.nombre}</td>
                   <td>{species.familia_nombre}</td>
                   <td>
-                    <button
-                      disabled={catalogSaving}
-                      onClick={() => deleteEspecie(species.id)}
-                    >
+                    <button disabled={catalogSaving} onClick={() => deleteEspecie(species.id)}>
                       Eliminar
                     </button>
                   </td>
                 </tr>
               ))}
+              {!especiesConFamilia.length ? (
+                <tr>
+                  <td colSpan="3" style={{ textAlign: 'center', color: '#64748b' }}>
+                    No hay especies cargadas.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
+        </div>
+      </div>
+    </>
+  );
+
+  const renderExportadoras = () => (
+    <div className="panel panel--compact" style={{ marginBottom: '1rem' }}>
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Exportadoras</p>
+          <h2>Visibilidad en línea</h2>
         </div>
       </div>
 
@@ -822,9 +821,59 @@ export const ConfigEditor = ({
                 </td>
               </tr>
             ))}
+            {!entities.length ? (
+              <tr>
+                <td colSpan="5" style={{ textAlign: 'center', color: '#64748b' }}>
+                  No hay exportadoras cargadas.
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>
+    </div>
+  );
+
+  const renderActiveTab = () => {
+    switch (activeTab) {
+      case 'parametros':
+        return renderParametros();
+      case 'catalogos':
+        return renderCatalogos();
+      case 'exportadoras':
+        return renderExportadoras();
+      case 'temporadas':
+        return <TemporadasEditor familias={familias} setFamilias={setFamilias} />;
+      case 'calendario':
+        return renderCalendario();
+      case 'curado':
+        return renderCurado();
+      case 'parametros-dia':
+        return <ParametrosDiaEditor entities={entities} />;
+      default:
+        return renderParametros();
+    }
+  };
+
+  return (
+    <section className="panel">
+      {error ? <div className="status-banner status-banner--warn">{error}</div> : null}
+      {success ? <div className="status-banner status-banner--ok">{success}</div> : null}
+      {catalogError ? <div className="status-banner status-banner--warn">{catalogError}</div> : null}
+      {catalogSuccess ? <div className="status-banner status-banner--ok">{catalogSuccess}</div> : null}
+      {holidayError ? <div className="status-banner status-banner--warn">{holidayError}</div> : null}
+      {holidaySuccess ? <div className="status-banner status-banner--ok">{holidaySuccess}</div> : null}
+      {curadoError ? <div className="status-banner status-banner--warn">{curadoError}</div> : null}
+      {curadoSuccess ? <div className="status-banner status-banner--ok">{curadoSuccess}</div> : null}
+
+      <div style={{ marginBottom: '0.5rem' }}>
+        <h3 style={{ margin: 0 }}>Submódulos de administración</h3>
+      </div>
+
+      <ConfigSubMenu active={activeTab} onChange={setActiveTab} />
+      {renderActiveTab()}
     </section>
   );
 };
+
+export default ConfigEditor;

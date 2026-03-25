@@ -1,12 +1,25 @@
 import { formatDate, formatWeekday, isSunday } from '../../utils/date';
 
+const normalizeDate = (value) => (value ? String(value).slice(0, 10) : '');
+
+const buildDailyBinsMap = (parametrosDia = []) =>
+  new Map(
+    parametrosDia.map((item) => [
+      `${Number(item.exportadora_id)}|${normalizeDate(item.fecha)}`,
+      Number(item.bins_por_hora || 0),
+    ]),
+  );
+
 export const createProjectionMetrics = ({
   dates,
   entities,
   data,
   familyBySpeciesId,
   parametersBySpeciesId,
+  parametrosDia = [],
 }) => {
+  const dailyBinsMap = buildDailyBinsMap(parametrosDia);
+
   const rows = dates.map((date) => ({
     fecha: date,
     label: formatDate(date),
@@ -36,6 +49,9 @@ export const createProjectionMetrics = ({
       const cosecha = Number(day.cosecha || 0);
       const curado = Number(day.curado || 0);
       const proceso = Number(day.proceso || 0);
+      const binsPorHoraDia =
+        dailyBinsMap.get(`${Number(entity.id)}|${date}`) ||
+        Number(params.bins_por_hora || 18);
 
       running += usesCurado ? curado - proceso : cosecha - proceso;
 
@@ -44,7 +60,7 @@ export const createProjectionMetrics = ({
       row.curado += curado;
       row.proceso += proceso;
       row.balance += running;
-      row.horas += params.bins_por_hora > 0 ? proceso / params.bins_por_hora : 0;
+      row.horas += binsPorHoraDia > 0 ? proceso / binsPorHoraDia : 0;
       row.kgProcesados += proceso * Number(params.kg_por_bin || 0);
       row[entity.label] = running;
     });
