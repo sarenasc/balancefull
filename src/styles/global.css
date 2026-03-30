@@ -243,3 +243,13 @@ th {
   background: #6b7280;
   border-radius: 999px;
 }
+.blink-negative {
+  color: #dc2626 !important;
+  font-weight: 800;
+  animation: blinkNegative 0.8s ease-in-out infinite;
+}
+@keyframes blinkNegative {
+  0%   { opacity: 1; }
+  50%  { opacity: 0.25; }
+  100% { opacity: 1; }
+}

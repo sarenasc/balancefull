@@ -144,7 +144,7 @@ const getDateCellMeta = ({ date, holidaySet, currentWeekLabel }) => {
 const getBodyCellStyle = (meta, { blocked = false, negative = false, total = false } = {}) => {
   let background = meta.background;
   let color = '#0f172a';
-
+  
   if (total) {
     background = meta.currentWeek ? '#cfe0fa' : '#d7e4f7';
     color = '#0369a1';
@@ -158,6 +158,7 @@ const getBodyCellStyle = (meta, { blocked = false, negative = false, total = fal
   if (negative) {
     background = palette.negative;
     color = '#dc2626';
+    
   }
 
   return {
@@ -168,6 +169,7 @@ const getBodyCellStyle = (meta, { blocked = false, negative = false, total = fal
     color,
     fontWeight: negative ? 800 : total ? 700 : 500,
     minWidth: '78px',
+    
   };
 };
 
@@ -218,7 +220,7 @@ const renderRows = (rows, dates, holidaySet, currentWeekLabel, options = {}) => 
             {editable && entity ? (
               <>
                 <input
-                  className="balance-input"
+                  className={`balance-input ${value < 0 ? 'blink-negative' : ''}`}
                   type="number"
                   min="0"
                   value={value}
@@ -264,7 +266,9 @@ const renderRows = (rows, dates, holidaySet, currentWeekLabel, options = {}) => 
               </>
             ) : (
               <>
-                <div>{formatCellValue(value)}</div>
+                <div className={value < 0 ? 'blink-negative':''}>
+                  {formatCellValue(value)}
+                </div>
                 {showAutoHint && autoValue > 0 ? (
                   <div style={{ fontSize: '0.68rem', color: '#7c3aed', marginTop: '0.15rem' }}>
                     auto {formatNumber(autoValue)}
@@ -850,7 +854,7 @@ export const BalanceFamilyTable = ({
               </div>
               <div>
                 <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase' }}>% uso línea</div>
-                <div style={{ fontSize: '1rem', color: '#64748b' }}>
+                <div style={{ fontSize: '1rem', color: '#080808' }}>
                   {`${weeklySummary.usagePercent.toFixed(1)}%`}
                 </div>
               </div>

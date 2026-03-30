@@ -2,13 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '../components/layout/AppShell';
 import { StatusBanner } from '../components/ui/StatusBanner';
 import { appConfig } from './config';
-import { DashboardOverview } from '../features/dashboard/DashboardOverview';
-import { ConfigSummary } from '../features/config/ConfigSummary';
 import { ConfigEditor } from '../features/config/ConfigEditor';
 import { ProjectionPanel } from '../features/projection/ProjectionPanel';
 import { createProjectionMetrics } from '../features/projection/projectionModel';
 import { BalanceBoard } from '../features/balance/BalanceBoard';
-import { SchedulingSummary } from '../features/scheduling/SchedulingSummary';
 import { TurnoDefinitionEditor } from '../features/scheduling/TurnoDefinitionEditor';
 import { WeeklyScheduleEditor } from '../features/scheduling/WeeklyScheduleEditor';
 import { RestrictionTypeEditor } from '../features/scheduling/RestrictionTypeEditor';
@@ -253,28 +250,7 @@ export const App = () => {
 
   const renderDashboard = () => (
     <>
-      <div style={panelHintStyle}>
-        <div style={{ fontSize: '0.78rem', letterSpacing: '0.18em', color: '#64748b', textTransform: 'uppercase' }}>
-          Dashboard
-        </div>
-        <div style={{ marginTop: '0.35rem', fontSize: '0.95rem', color: '#334155' }}>
-          Vista general del sistema. Aquí irán luego los KPI reales una vez que Operación y Balance estén consolidados.
-        </div>
-      </div>
-
-      <DashboardOverview entities={entities} metrics={metrics} />
-
-      <div className="layout-grid">
-        <ProjectionPanel entities={entities} metrics={metrics} />
-        <div className="sidebar-stack">
-          <ConfigSummary
-            apiBaseUrl={appConfig.apiBaseUrl}
-            planningStart={appConfig.planningStart}
-            planningDays={appConfig.planningDays}
-          />
-          <SchedulingSummary families={familias} />
-        </div>
-      </div>
+      <ProjectionPanel entities={entities} metrics={metrics} />
     </>
   );
 

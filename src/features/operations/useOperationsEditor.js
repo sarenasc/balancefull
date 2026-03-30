@@ -104,12 +104,12 @@ export const useOperationsEditor = ({
 
       const nextBalance = baseBalance - numericValue;
 
-      if (nextBalance < 0) {
+      /*if (nextBalance < 0) {
         const ok = window.confirm(
           `El balance quedará negativo (${nextBalance}). ¿Deseas guardar de todas formas?`,
         );
         if (!ok) return false;
-      }
+      }*/
     }
 
     setError(null);
