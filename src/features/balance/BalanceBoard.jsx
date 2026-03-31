@@ -25,6 +25,7 @@ export const BalanceBoard = ({
   curadoHoursConfig,
   parametersBySpeciesId,
   parametrosDia = [],
+  horasExtraDia = [],
 }) => {
   const { savingCell, error, updateCell, setDraftCell } = useOperationsEditor({
     entities,
@@ -50,8 +51,9 @@ export const BalanceBoard = ({
         curadoHoursConfig,
         parametersBySpeciesId,
         parametrosDia,
+        horasExtraDia,
       }),
-    [dates, familias, especies, entities, data, curadoHoursConfig, parametersBySpeciesId, parametrosDia],
+    [dates, familias, especies, entities, data, curadoHoursConfig, parametersBySpeciesId, parametrosDia, horasExtraDia],
   );
 
   const familyTabs = model.families || [];

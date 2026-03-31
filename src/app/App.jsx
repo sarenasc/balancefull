@@ -6,9 +6,7 @@ import { ConfigEditor } from '../features/config/ConfigEditor';
 import { ProjectionPanel } from '../features/projection/ProjectionPanel';
 import { createProjectionMetrics } from '../features/projection/projectionModel';
 import { BalanceBoard } from '../features/balance/BalanceBoard';
-import { TurnoDefinitionEditor } from '../features/scheduling/TurnoDefinitionEditor';
 import { WeeklyScheduleEditor } from '../features/scheduling/WeeklyScheduleEditor';
-import { RestrictionTypeEditor } from '../features/scheduling/RestrictionTypeEditor';
 import { usePlannerData } from '../hooks/usePlannerData';
 
 const panelHintStyle = {
@@ -46,6 +44,7 @@ export const App = () => {
   const [turnosDefinicion, setTurnosDefinicion] = useState([]);
   const [tiposRestriccion, setTiposRestriccion] = useState([]);
   const [parametrosDia, setParametrosDia] = useState([]);
+  const [horasExtraDia, setHorasExtraDia] = useState([]);
   const [data, setData] = useState({});
   const [defaultParameters, setDefaultParameters] = useState({
     especie_id: null,
@@ -159,6 +158,21 @@ export const App = () => {
     loadParametrosDia();
   }, []);
 
+  useEffect(() => {
+    const loadHorasExtraDia = async () => {
+      try {
+        const response = await fetch(`${appConfig.apiBaseUrl}/horas-extra-dia`);
+        if (!response.ok) throw new Error('No fue posible cargar horas extra');
+        const rows = await response.json();
+        setHorasExtraDia(Array.isArray(rows) ? rows : []);
+      } catch (_error) {
+        setHorasExtraDia([]);
+      }
+    };
+
+    loadHorasExtraDia();
+  }, []);
+
   const familyBySpeciesId = useMemo(() => {
     const familyMap = new Map(familias.map((family) => [Number(family.id), family]));
     return new Map(
@@ -267,36 +281,17 @@ export const App = () => {
       curadoHoursConfig={curadoHoursConfig}
       parametersBySpeciesId={parametersBySpeciesId}
       parametrosDia={parametrosDia}
+      horasExtraDia={horasExtraDia}
     />
   );
 
   const renderCalendario = () => (
-    <>
-      <div style={panelHintStyle}>
-        <div style={{ fontSize: '0.78rem', letterSpacing: '0.18em', color: '#64748b', textTransform: 'uppercase' }}>
-          Calendario
-        </div>
-        <div style={{ marginTop: '0.35rem', fontSize: '0.95rem', color: '#334155' }}>
-          Capa de planificación semanal. Aquí bajamos la operación ya definida a turnos y bloques de trabajo.
-        </div>
-      </div>
-
-      <TurnoDefinitionEditor
-        turnosDefinicion={turnosDefinicion}
-        setTurnosDefinicion={setTurnosDefinicion}
-      />
-
-      <RestrictionTypeEditor
-        tiposRestriccion={tiposRestriccion}
-        setTiposRestriccion={setTiposRestriccion}
-      />
-
-      <WeeklyScheduleEditor
-        turnosDefinicion={turnosDefinicion}
-        entities={entities}
-        tiposRestriccion={tiposRestriccion}
-      />
-    </>
+    <WeeklyScheduleEditor
+      turnosDefinicion={turnosDefinicion}
+      entities={entities}
+      tiposRestriccion={tiposRestriccion}
+      holidays={holidays}
+    />
   );
 
   const renderConfiguracion = () => (
@@ -315,6 +310,10 @@ export const App = () => {
       setHolidays={setHolidays}
       curadoHoursConfig={curadoHoursConfig}
       setCuradoHoursConfig={setCuradoHoursConfig}
+      turnosDefinicion={turnosDefinicion}
+      setTurnosDefinicion={setTurnosDefinicion}
+      tiposRestriccion={tiposRestriccion}
+      setTiposRestriccion={setTiposRestriccion}
     />
   );
 

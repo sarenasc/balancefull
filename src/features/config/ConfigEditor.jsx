@@ -6,6 +6,8 @@ import { useCuradoHoursEditor } from './useCuradoHoursEditor';
 import ConfigSubMenu from './ConfigSubMenu';
 import ParametrosDiaEditor from './ParametrosDiaEditor';
 import TemporadasEditor from './TemporadasEditor';
+import { TurnoDefinitionEditor } from '../scheduling/TurnoDefinitionEditor';
+import { RestrictionTypeEditor } from '../scheduling/RestrictionTypeEditor';
 
 const inputStyle = {
   width: '100%',
@@ -40,6 +42,10 @@ export const ConfigEditor = ({
   setHolidays,
   curadoHoursConfig,
   setCuradoHoursConfig,
+  turnosDefinicion,
+  setTurnosDefinicion,
+  tiposRestriccion,
+  setTiposRestriccion,
 }) => {
   const [activeTab, setActiveTab] = useState('parametros');
   const [form, setForm] = useState({
@@ -142,11 +148,17 @@ export const ConfigEditor = ({
     holidayError,
     holidaySuccess,
     addHoliday,
+    updateHoliday,
     deleteHoliday,
   } = useHolidayEditor({
     holidays,
     setHolidays,
   });
+
+  const [editingHoliday, setEditingHoliday] = useState(null); // { fecha, nombre }
+
+  const getFecha = (item) => (typeof item === 'string' ? item : item?.fecha);
+  const getNombre = (item) => (typeof item === 'string' ? '' : item?.nombre || '');
 
   const {
     curadoSaving,
@@ -416,23 +428,70 @@ export const ConfigEditor = ({
           <thead>
             <tr>
               <th>Fecha</th>
+              <th>Nombre</th>
               <th>Acción</th>
             </tr>
           </thead>
           <tbody>
-            {holidays.map((holiday) => (
-              <tr key={holiday}>
-                <td>{holiday}</td>
-                <td>
-                  <button disabled={holidaySaving} onClick={() => deleteHoliday(holiday)}>
-                    Eliminar
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {holidays.map((holiday) => {
+              const fecha = getFecha(holiday);
+              const nombre = getNombre(holiday);
+              const isEditing = editingHoliday?.fecha === fecha;
+              return (
+                <tr key={fecha}>
+                  <td>{fecha}</td>
+                  <td>
+                    {isEditing ? (
+                      <input
+                        value={editingHoliday.nombre}
+                        onChange={(event) =>
+                          setEditingHoliday((current) => ({ ...current, nombre: event.target.value }))
+                        }
+                        style={{ padding: '0.3rem 0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', width: '100%' }}
+                      />
+                    ) : (
+                      nombre || '—'
+                    )}
+                  </td>
+                  <td style={{ display: 'flex', gap: '0.4rem' }}>
+                    {isEditing ? (
+                      <>
+                        <button
+                          disabled={holidaySaving}
+                          onClick={async () => {
+                            const ok = await updateHoliday(editingHoliday.fecha, editingHoliday.nombre);
+                            if (ok) setEditingHoliday(null);
+                          }}
+                        >
+                          Guardar
+                        </button>
+                        <button
+                          disabled={holidaySaving}
+                          onClick={() => setEditingHoliday(null)}
+                        >
+                          Cancelar
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          disabled={holidaySaving}
+                          onClick={() => setEditingHoliday({ fecha, nombre })}
+                        >
+                          Editar
+                        </button>
+                        <button disabled={holidaySaving} onClick={() => deleteHoliday(fecha)}>
+                          Eliminar
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
             {!holidays.length ? (
               <tr>
-                <td colSpan="2" style={{ textAlign: 'center', color: '#64748b' }}>
+                <td colSpan="3" style={{ textAlign: 'center', color: '#64748b' }}>
                   No hay feriados cargados.
                 </td>
               </tr>
@@ -850,6 +909,20 @@ export const ConfigEditor = ({
         return renderCurado();
       case 'parametros-dia':
         return <ParametrosDiaEditor entities={entities} />;
+      case 'turnos':
+        return (
+          <TurnoDefinitionEditor
+            turnosDefinicion={turnosDefinicion || []}
+            setTurnosDefinicion={setTurnosDefinicion || (() => {})}
+          />
+        );
+      case 'restricciones':
+        return (
+          <RestrictionTypeEditor
+            tiposRestriccion={tiposRestriccion || []}
+            setTiposRestriccion={setTiposRestriccion || (() => {})}
+          />
+        );
       default:
         return renderParametros();
     }

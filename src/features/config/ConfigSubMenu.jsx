@@ -5,9 +5,11 @@ const tabs = [
   { key: 'catalogos', label: 'Catálogos' },
   { key: 'exportadoras', label: 'Exportadoras' },
   { key: 'temporadas', label: 'Temporadas' },
-  { key: 'calendario', label: 'Calendario' },
+  { key: 'calendario', label: 'Feriados' },
   { key: 'curado', label: 'Curado' },
   { key: 'parametros-dia', label: 'Parámetros día' },
+  { key: 'turnos', label: 'Turnos' },
+  { key: 'restricciones', label: 'Restricciones' },
 ];
 
 const buttonStyle = (active) => ({

@@ -215,6 +215,9 @@ const renderRows = (rows, dates, holidaySet, currentWeekLabel, options = {}) => 
         const key = `${row.field}_${row.entityId}_${date}`;
         const entity = entityMap.get(Number(row.entityId));
 
+        const binsPerHour = row.binsPerHourValues?.[date];
+        const isOverride = row.isOverrideValues?.[date];
+
         return (
           <td key={key} style={getBodyCellStyle(meta)}>
             {editable && entity ? (
@@ -258,9 +261,9 @@ const renderRows = (rows, dates, holidaySet, currentWeekLabel, options = {}) => 
                     auto {formatNumber(autoValue)}
                   </div>
                 ) : null}
-                {showHours && value > 0 ? (
-                  <div style={{ fontSize: '0.66rem', color: '#64748b', marginTop: '0.15rem' }}>
-                    editable
+                {binsPerHour != null ? (
+                  <div style={{ fontSize: '0.66rem', marginTop: '0.15rem', color: isOverride ? '#d97706' : '#94a3b8', fontWeight: isOverride ? 700 : 400 }}>
+                    {isOverride ? '★ ' : ''}{formatNumber(binsPerHour, 1)} b/h
                   </div>
                 ) : null}
               </>
@@ -272,6 +275,11 @@ const renderRows = (rows, dates, holidaySet, currentWeekLabel, options = {}) => 
                 {showAutoHint && autoValue > 0 ? (
                   <div style={{ fontSize: '0.68rem', color: '#7c3aed', marginTop: '0.15rem' }}>
                     auto {formatNumber(autoValue)}
+                  </div>
+                ) : null}
+                {binsPerHour != null ? (
+                  <div style={{ fontSize: '0.66rem', marginTop: '0.15rem', color: isOverride ? '#d97706' : '#94a3b8', fontWeight: isOverride ? 700 : 400 }}>
+                    {isOverride ? '★ ' : ''}{formatNumber(binsPerHour, 1)} b/h
                   </div>
                 ) : null}
               </>
@@ -379,6 +387,7 @@ export const BalanceFamilyTable = ({
   const contentRef = useRef(null);
   const tableRef = useRef(null);
   const bottomScrollRef = useRef(null);
+  const todayColRef = useRef(null);
 
   const weeklySummary = useMemo(() => {
     if (!hoveredSunday) return null;
@@ -523,6 +532,16 @@ export const BalanceFamilyTable = ({
     return () => window.removeEventListener('resize', updateBottomTrack);
   }, [isFullscreen, fitScale, dates.length, sections]);
 
+  // Scroll to current week on first render once dates are available
+  useLayoutEffect(() => {
+    if (!dates.length || !viewportRef.current || !todayColRef.current) return;
+    const viewport = viewportRef.current;
+    const th = todayColRef.current;
+    const left = th.offsetLeft - viewport.clientWidth / 2 + th.offsetWidth / 2;
+    viewport.scrollLeft = Math.max(0, left);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dates.length > 0]);
+
   return (
     <section
       className="panel"
@@ -651,11 +670,13 @@ export const BalanceFamilyTable = ({
                   Especie
                 </th>
 
-                {dates.map((date) => {
+                {dates.map((date, dateIdx) => {
                   const meta = getDateCellMeta({ date, holidaySet, currentWeekLabel });
+                  const isFirstCurrentWeek = meta.currentWeek && (dateIdx === 0 || !getDateCellMeta({ date: dates[dateIdx - 1], holidaySet, currentWeekLabel }).currentWeek);
                   return (
                     <th
                       key={date}
+                      ref={isFirstCurrentWeek ? todayColRef : null}
                       onMouseEnter={() => {
                         if (meta.sunday) setHoveredSunday(date);
                       }}

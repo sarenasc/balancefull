@@ -102,6 +102,14 @@ const buildDailyBinsMap = (parametrosDia = []) =>
     ]),
   );
 
+const buildDailyExtrasMap = (horasExtraDia = []) =>
+  new Map(
+    horasExtraDia.map((item) => [
+      `${Number(item.exportadora_id)}|${normalizeDate(item.fecha)}`,
+      safeNumber(item.horas_extra),
+    ]),
+  );
+
 const buildFamilySections = ({
   family,
   familyDates,
@@ -110,6 +118,7 @@ const buildFamilySections = ({
   curadoHoursConfig,
   parametersBySpeciesId,
   parametrosDia,
+  horasExtraDia,
 }) => {
   const curadoAutoMap = buildCuradoAutoMap({
     familyEntities,
@@ -119,6 +128,7 @@ const buildFamilySections = ({
     curadoHoursConfig,
   });
   const dailyBinsMap = buildDailyBinsMap(parametrosDia);
+  const dailyExtrasMap = buildDailyExtrasMap(horasExtraDia);
 
   const sections = {
     cosecha: [],
@@ -154,6 +164,8 @@ const buildFamilySections = ({
     const curadoValues = {};
     const procesoValues = {};
     const balanceValues = {};
+    const binsPerHourValues = {};
+    const isOverrideValues = {};
 
     let runningBalance = 0;
 
@@ -182,12 +194,19 @@ const buildFamilySections = ({
 
       balanceValues[date] = runningBalance;
 
-      const binsPorHoraDia =
-        dailyBinsMap.get(`${entityId}|${date}`) ??
-        Math.max(1, safeNumber(params.bins_por_hora || 18));
+      const dayKey = `${entityId}|${date}`;
+      const hasOverride = dailyBinsMap.has(dayKey);
+      const binsPorHoraDia = hasOverride
+        ? dailyBinsMap.get(dayKey)
+        : Math.max(1, safeNumber(params.bins_por_hora || 18));
+
+      const extraHoras = dailyExtrasMap.get(`${entityId}|${date}`) || 0;
+
+      binsPerHourValues[date] = binsPorHoraDia;
+      isOverrideValues[date] = hasOverride;
 
       totals.totalProceso[date] += proceso;
-      totals.totalHorasProceso[date] += proceso / Math.max(1, binsPorHoraDia);
+      totals.totalHorasProceso[date] += proceso / Math.max(1, binsPorHoraDia) + extraHoras;
       totals.totalBalance[date] += runningBalance;
     });
 
@@ -216,6 +235,8 @@ const buildFamilySections = ({
       ...baseRow,
       field: 'proceso',
       values: procesoValues,
+      binsPerHourValues,
+      isOverrideValues,
     });
 
     sections.balance.push({
@@ -237,6 +258,7 @@ export const buildBalanceModel = ({
   curadoHoursConfig = {},
   parametersBySpeciesId,
   parametrosDia = [],
+  horasExtraDia = [],
 }) => {
   const entityFamilyMap = buildEntityFamilyMap({ entities, especies });
 
@@ -258,6 +280,7 @@ export const buildBalanceModel = ({
         curadoHoursConfig,
         parametersBySpeciesId,
         parametrosDia,
+        horasExtraDia,
       });
 
       return {
