@@ -1,8 +1,8 @@
-export const StatusBanner = ({ source, error }) => {
+export const StatusBanner = ({ source, error, flashMsg }) => {
   if (!error && source !== 'mock') {
     return (
       <div className="status-banner status-banner--ok">
-        Conectado
+        {flashMsg || 'Conectado'}
       </div>
     );
   }

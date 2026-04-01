@@ -1,0 +1,37 @@
+services:
+  balance_backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: balance_backend
+    environment:
+      PORT: 4001
+      DB_SERVER: ${DB_SERVER:-172.20.20.5}
+      DB_PORT: ${DB_PORT:-1433}
+      DB_NAME: ${DB_NAME:-almahue_balance}
+      DB_USER: ${DB_USER:-sa}
+      DB_PASSWORD: ${DB_PASSWORD:-Robin@2021}
+    restart: unless-stopped
+    networks:
+      - balance_net
+
+  balance_frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_BASE_URL: /api
+        VITE_PLANNING_START: ${VITE_PLANNING_START:-2026-03-12}
+        VITE_PLANNING_DAYS: ${VITE_PLANNING_DAYS:-100}
+    container_name: balance_frontend
+    depends_on:
+      - balance_backend
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    networks:
+      - balance_net
+
+networks:
+  balance_net:
+    driver: bridge

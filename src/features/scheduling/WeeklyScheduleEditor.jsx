@@ -290,6 +290,7 @@ export const WeeklyScheduleEditor = ({
   entities,
   tiposRestriccion,
   holidays = [],
+  onAutoSaved,
 }) => {
   const now = new Date();
   const currentWeek = getWeekNumber(now);
@@ -314,6 +315,7 @@ export const WeeklyScheduleEditor = ({
   const [copyWeekYear, setCopyWeekYear] = useState(currentYear);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [printExportadora, setPrintExportadora] = useState('all');
   const [dragItem, setDragItem] = useState(null);
   const [paintTool, setPaintTool] = useState(null);
   const [isPainting, setIsPainting] = useState(false);
@@ -723,7 +725,7 @@ export const WeeklyScheduleEditor = ({
 
       await loadWeek({ silent: true });
       if (silent) {
-        setSuccess('Cambios guardados automáticamente.');
+        onAutoSaved?.();
       } else {
         setSuccess('Calendario semanal y restricciones guardados correctamente.');
       }
@@ -1083,6 +1085,19 @@ export const WeeklyScheduleEditor = ({
 
         <div style={{ width: '1px', height: '28px', background: '#e2e8f0', margin: '0 0.25rem' }} />
 
+        {/* Filtro exportadora para imprimir */}
+        <select
+          data-no-print="true"
+          value={printExportadora}
+          onChange={(e) => setPrintExportadora(e.target.value)}
+          style={{ fontSize: '0.78rem', padding: '0.25rem 0.4rem', borderRadius: '6px', border: '1px solid #dbe4f0', background: '#f8fafc', color: '#334155', cursor: 'pointer' }}
+        >
+          <option value="all">Todas las exportadoras</option>
+          {visibleEntities.map((entity) => (
+            <option key={entity.id} value={String(entity.id)}>{getEntityLabel(entity)}</option>
+          ))}
+        </select>
+
         {/* Exportar */}
         <button type="button" onClick={handlePrint} style={actionButtonStyle}>Imprimir</button>
         <button type="button" onClick={handleExportImage} style={actionButtonStyle} disabled={exporting}>
@@ -1387,7 +1402,7 @@ export const WeeklyScheduleEditor = ({
                           // Collect unique entities and restrictions across all 30-min slots in this group
                           const entityIds = [...new Set(
                             group.slots.map((h) => assignments[`${date}_${h}`]).filter(Boolean)
-                          )];
+                          )].filter((id) => printExportadora === 'all' || String(id) === printExportadora);
                           const restrictionsByKey = new Map();
                           group.slots.forEach((h) => {
                             const r = restricciones[`${date}_${h}`];

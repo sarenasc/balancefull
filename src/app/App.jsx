@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppShell } from '../components/layout/AppShell';
 import { StatusBanner } from '../components/ui/StatusBanner';
 import { appConfig } from './config';
@@ -35,6 +35,14 @@ export const App = () => {
   } = planner;
 
   const [activeView, setActiveView] = useState('balance');
+  const [flashMsg, setFlashMsg] = useState(null);
+  const flashTimer = useRef(null);
+
+  const handleAutoSaved = useCallback(() => {
+    setFlashMsg('Cambios guardados automáticamente.');
+    clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlashMsg(null), 3000);
+  }, []);
   const [entities, setEntities] = useState([]);
   const [familias, setFamilias] = useState([]);
   const [especies, setEspecies] = useState([]);
@@ -291,6 +299,7 @@ export const App = () => {
       entities={entities}
       tiposRestriccion={tiposRestriccion}
       holidays={holidays}
+      onAutoSaved={handleAutoSaved}
     />
   );
 
@@ -340,7 +349,7 @@ export const App = () => {
       activeView={activeView}
       onChangeView={setActiveView}
     >
-      <StatusBanner source={source} error={error} />
+      <StatusBanner source={source} error={error} flashMsg={flashMsg} />
 
       {status === 'loading' ? <div className="panel">Cargando información inicial…</div> : null}
 

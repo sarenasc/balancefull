@@ -306,6 +306,14 @@ app.delete("/api/parametros-dia/:id", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.get("/api/horas-extra-dia", async (req, res) => {
+  try {
+    const p = await getPool();
+    const r = await p.request().query("SELECT * FROM horas_extra_dia ORDER BY fecha DESC");
+    res.json(r.recordset);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get("/api/temporada", async (req, res) => {
   try {
     const p = await getPool();
@@ -994,7 +1002,8 @@ app.get("/api/turnos-definicion", async (req, res) => {
         id, nombre,
         hora_inicio, hora_fin,
         colacion_inicio, colacion_fin,
-        orden, activa
+        orden, activa,
+        horas_extra, horas_extra_inicio
       FROM turnos_definicion
       WHERE activa=1
       ORDER BY orden, id
@@ -1004,7 +1013,7 @@ app.get("/api/turnos-definicion", async (req, res) => {
 });
 
 app.post("/api/turnos-definicion", async (req, res) => {
-  const { nombre, hora_inicio, hora_fin, colacion_inicio, colacion_fin, orden } = req.body;
+  const { nombre, hora_inicio, hora_fin, colacion_inicio, colacion_fin, orden, horas_extra, horas_extra_inicio } = req.body;
   try {
     const validarHora = (hora, campo) => {
       if (hora === null || hora === undefined) return null;
@@ -1018,6 +1027,8 @@ app.post("/api/turnos-definicion", async (req, res) => {
     const hf = validarHora(hora_fin,       "hora_fin");
     const ci = validarHora(colacion_inicio, "colacion_inicio");
     const cf = validarHora(colacion_fin,    "colacion_fin");
+    const he  = horas_extra        != null ? Number(horas_extra)        : null;
+    const hei = horas_extra_inicio != null ? Number(horas_extra_inicio) : null;
 
     if (!hi || !hf) throw new Error("hora_inicio y hora_fin son obligatorias");
 
@@ -1029,19 +1040,23 @@ app.post("/api/turnos-definicion", async (req, res) => {
     if (existing.recordset.length > 0) {
       const result = await p.request()
         .input("nombre", sql.NVarChar, nombre)
-        .input("hi", sql.VarChar(8), hi)
-        .input("hf", sql.VarChar(8), hf)
-        .input("ci", sql.VarChar(8), ci)
-        .input("cf", sql.VarChar(8), cf)
-        .input("orden", sql.Int, orden || 0)
+        .input("hi",  sql.VarChar(8),   hi)
+        .input("hf",  sql.VarChar(8),   hf)
+        .input("ci",  sql.VarChar(8),   ci)
+        .input("cf",  sql.VarChar(8),   cf)
+        .input("orden", sql.Int,        orden || 0)
+        .input("he",  sql.Decimal(4,1), he)
+        .input("hei", sql.Decimal(4,1), hei)
         .query(`
           UPDATE turnos_definicion
           SET activa=1,
-              hora_inicio      = CAST(@hi AS TIME),
-              hora_fin         = CAST(@hf AS TIME),
-              colacion_inicio  = CASE WHEN @ci IS NULL THEN NULL ELSE CAST(@ci AS TIME) END,
-              colacion_fin     = CASE WHEN @cf IS NULL THEN NULL ELSE CAST(@cf AS TIME) END,
-              orden            = @orden
+              hora_inicio        = CAST(@hi AS TIME),
+              hora_fin           = CAST(@hf AS TIME),
+              colacion_inicio    = CASE WHEN @ci IS NULL THEN NULL ELSE CAST(@ci AS TIME) END,
+              colacion_fin       = CASE WHEN @cf IS NULL THEN NULL ELSE CAST(@cf AS TIME) END,
+              orden              = @orden,
+              horas_extra        = @he,
+              horas_extra_inicio = @hei
           OUTPUT INSERTED.*
           WHERE nombre=@nombre
         `);
@@ -1049,14 +1064,16 @@ app.post("/api/turnos-definicion", async (req, res) => {
     } else {
       const result = await p.request()
         .input("nombre", sql.NVarChar, nombre)
-        .input("hi", sql.VarChar(8), hi)
-        .input("hf", sql.VarChar(8), hf)
-        .input("ci", sql.VarChar(8), ci)
-        .input("cf", sql.VarChar(8), cf)
-        .input("orden", sql.Int, orden || 0)
+        .input("hi",  sql.VarChar(8),   hi)
+        .input("hf",  sql.VarChar(8),   hf)
+        .input("ci",  sql.VarChar(8),   ci)
+        .input("cf",  sql.VarChar(8),   cf)
+        .input("orden", sql.Int,        orden || 0)
+        .input("he",  sql.Decimal(4,1), he)
+        .input("hei", sql.Decimal(4,1), hei)
         .query(`
           INSERT INTO turnos_definicion
-            (nombre, hora_inicio, hora_fin, colacion_inicio, colacion_fin, orden)
+            (nombre, hora_inicio, hora_fin, colacion_inicio, colacion_fin, orden, horas_extra, horas_extra_inicio)
           OUTPUT INSERTED.*
           VALUES (
             @nombre,
@@ -1064,7 +1081,9 @@ app.post("/api/turnos-definicion", async (req, res) => {
             CAST(@hf AS TIME),
             CASE WHEN @ci IS NULL THEN NULL ELSE CAST(@ci AS TIME) END,
             CASE WHEN @cf IS NULL THEN NULL ELSE CAST(@cf AS TIME) END,
-            @orden
+            @orden,
+            @he,
+            @hei
           )
         `);
       res.json(result.recordset[0]);
@@ -1076,7 +1095,7 @@ app.post("/api/turnos-definicion", async (req, res) => {
 });
 
 app.put("/api/turnos-definicion/:id", async (req, res) => {
-  const { nombre, hora_inicio, hora_fin, colacion_inicio, colacion_fin, orden } = req.body;
+  const { nombre, hora_inicio, hora_fin, colacion_inicio, colacion_fin, orden, horas_extra, horas_extra_inicio } = req.body;
   try {
     const validarHora = (hora, campo) => {
       if (hora === null || hora === undefined) return null;
@@ -1086,30 +1105,36 @@ app.put("/api/turnos-definicion/:id", async (req, res) => {
       return hora;
     };
 
-    const hi = validarHora(hora_inicio,    "hora_inicio");
-    const hf = validarHora(hora_fin,       "hora_fin");
-    const ci = validarHora(colacion_inicio, "colacion_inicio");
-    const cf = validarHora(colacion_fin,    "colacion_fin");
+    const hi  = validarHora(hora_inicio,    "hora_inicio");
+    const hf  = validarHora(hora_fin,       "hora_fin");
+    const ci  = validarHora(colacion_inicio, "colacion_inicio");
+    const cf  = validarHora(colacion_fin,    "colacion_fin");
+    const he  = horas_extra        != null ? Number(horas_extra)        : null;
+    const hei = horas_extra_inicio != null ? Number(horas_extra_inicio) : null;
 
     if (!hi || !hf) throw new Error("hora_inicio y hora_fin son obligatorias");
 
     const p = await getPool();
     await p.request()
-      .input("id",     sql.Int,      req.params.id)
-      .input("nombre", sql.NVarChar, nombre)
+      .input("id",     sql.Int,        req.params.id)
+      .input("nombre", sql.NVarChar,   nombre)
       .input("hi",     sql.VarChar(8), hi)
       .input("hf",     sql.VarChar(8), hf)
       .input("ci",     sql.VarChar(8), ci)
       .input("cf",     sql.VarChar(8), cf)
-      .input("orden",  sql.Int,      orden)
+      .input("orden",  sql.Int,        orden)
+      .input("he",     sql.Decimal(4,1), he)
+      .input("hei",    sql.Decimal(4,1), hei)
       .query(`
         UPDATE turnos_definicion SET
-          nombre          = @nombre,
-          hora_inicio     = CAST(@hi AS TIME),
-          hora_fin        = CAST(@hf AS TIME),
-          colacion_inicio = CASE WHEN @ci IS NULL THEN NULL ELSE CAST(@ci AS TIME) END,
-          colacion_fin    = CASE WHEN @cf IS NULL THEN NULL ELSE CAST(@cf AS TIME) END,
-          orden           = @orden
+          nombre             = @nombre,
+          hora_inicio        = CAST(@hi AS TIME),
+          hora_fin           = CAST(@hf AS TIME),
+          colacion_inicio    = CASE WHEN @ci IS NULL THEN NULL ELSE CAST(@ci AS TIME) END,
+          colacion_fin       = CASE WHEN @cf IS NULL THEN NULL ELSE CAST(@cf AS TIME) END,
+          orden              = @orden,
+          horas_extra        = @he,
+          horas_extra_inicio = @hei
         WHERE id=@id
       `);
     res.json({ ok: true });
