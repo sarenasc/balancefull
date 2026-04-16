@@ -82,6 +82,7 @@ export const ConfigEditor = ({
   const [curadoForms, setCuradoForms] = useState({});
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setForm({
       bins_por_hora: defaultParameters?.bins_por_hora ?? 18,
       horas_por_dia: defaultParameters?.horas_por_dia ?? 16,
@@ -102,6 +103,7 @@ export const ConfigEditor = ({
         kg_por_bin: params?.kg_por_bin ?? defaultParameters?.kg_por_bin ?? 460,
       };
     });
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSpeciesForms(map);
   }, [especies, parametrosEspecie, defaultParameters]);
 
@@ -110,6 +112,7 @@ export const ConfigEditor = ({
     entities.forEach((entity) => {
       map[entity.id] = curadoHoursConfig?.[entity.id] ?? entity.horas_curado ?? 48;
     });
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCuradoForms(map);
   }, [entities, curadoHoursConfig]);
 

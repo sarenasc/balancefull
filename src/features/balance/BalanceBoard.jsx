@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useOperationsEditor } from '../operations/useOperationsEditor';
 import { buildBalanceModel } from './balanceModel';
 import { BalanceFamilyTable } from './BalanceFamilyTable';
@@ -57,25 +57,10 @@ export const BalanceBoard = ({
   );
 
   const familyTabs = model.families || [];
-  const [activeFamilyId, setActiveFamilyId] = useState(familyTabs[0]?.familyId ?? null);
-
-  useEffect(() => {
-    if (!familyTabs.length) {
-      setActiveFamilyId(null);
-      return;
-    }
-
-    const stillExists = familyTabs.some(
-      (item) => Number(item.familyId) === Number(activeFamilyId),
-    );
-
-    if (!stillExists) {
-      setActiveFamilyId(familyTabs[0].familyId);
-    }
-  }, [familyTabs, activeFamilyId]);
+  const [requestedFamilyId, setRequestedFamilyId] = useState(null);
 
   const activeFamily =
-    familyTabs.find((item) => Number(item.familyId) === Number(activeFamilyId)) ||
+    familyTabs.find((item) => Number(item.familyId) === Number(requestedFamilyId)) ||
     familyTabs[0] ||
     null;
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -98,8 +83,8 @@ export const BalanceBoard = ({
               <button
                 key={family.familyId}
                 type="button"
-                onClick={() => setActiveFamilyId(family.familyId)}
-                style={tabStyle(Number(activeFamilyId) === Number(family.familyId))}
+                onClick={() => setRequestedFamilyId(family.familyId)}
+                style={tabStyle(Number(activeFamily?.familyId) === Number(family.familyId))}
               >
                 {family.familyName}
               </button>

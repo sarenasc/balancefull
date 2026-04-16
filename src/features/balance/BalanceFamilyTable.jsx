@@ -201,7 +201,6 @@ const renderRows = (rows, dates, holidaySet, currentWeekLabel, options = {}) => 
     setDraftCell,
     updateCell,
     savingCell,
-    showHours = false,
   } = options;
 
   return rows.map((row, rowIndex) => (
@@ -423,9 +422,15 @@ export const BalanceFamilyTable = ({
   onOpenFullscreen,
   isFullscreen = false,
 }) => {
-  if (!family) return null;
-
-  const { familyName, usaCurado, seasonStart, seasonEnd, dates, sections, totals } = family;
+  const {
+    familyName = '',
+    usaCurado = false,
+    seasonStart = null,
+    seasonEnd = null,
+    dates = [],
+    sections = { balance: [], cosecha: [], curado: [], proceso: [] },
+    totals = {},
+  } = family || {};
   const holidaySet = new Set(holidays.map(normalizeHoliday).filter(Boolean));
   const currentWeekLabel = formatWeekLabel(new Date().toISOString().slice(0, 10));
   const [hoveredSunday, setHoveredSunday] = useState(null);
@@ -506,7 +511,7 @@ export const BalanceFamilyTable = ({
       totalsRow,
       usagePercent,
     };
-  }, [dates, hoveredSunday, sections.balance, sections.curado, sections.proceso, totals]);
+  }, [dates, hoveredSunday, sections.balance, sections.cosecha, sections.curado, sections.proceso, totals, usaCurado]);
 
   useLayoutEffect(() => {
   if (!isFullscreen) {
@@ -589,6 +594,8 @@ export const BalanceFamilyTable = ({
     viewport.scrollLeft = Math.max(0, left);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dates.length > 0]);
+
+  if (!family) return null;
 
   return (
     <section

@@ -5,9 +5,9 @@ import { createApiClient } from '../../services/api';
 const api = createApiClient(appConfig.apiBaseUrl);
 
 export const useCatalogEditor = ({
-  familias,
+  familias: _familias,
   setFamilias,
-  especies,
+  especies: _especies,
   setEspecies,
 }) => {
   const [catalogError, setCatalogError] = useState(null);

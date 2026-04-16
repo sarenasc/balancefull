@@ -10,15 +10,6 @@ import { WeeklyScheduleEditor } from '../features/scheduling/WeeklyScheduleEdito
 import { usePlannerData } from '../hooks/usePlannerData';
 import { createApiClient, readList } from '../services/api';
 
-const panelHintStyle = {
-  marginBottom: '1rem',
-  padding: '1rem 1.1rem',
-  border: '1px solid #dbe4f0',
-  borderRadius: '12px',
-  background: '#fff',
-  boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)',
-};
-
 const api = createApiClient(appConfig.apiBaseUrl);
 
 export const App = () => {

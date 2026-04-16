@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { appConfig } from '../../app/config';
-import { TurnoDeliverable } from './TurnoDeliverable';
 import { createApiClient } from '../../services/api';
 
 const api = createApiClient(appConfig.apiBaseUrl);
@@ -94,33 +93,6 @@ const compactPanelStyle = {
   ...cardStyle,
   padding: '1rem',
   marginBottom: '1rem',
-};
-
-const chipStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '0.4rem',
-  padding: '0.28rem 0.55rem',
-  borderRadius: '999px',
-  fontSize: '0.75rem',
-  fontWeight: 700,
-  whiteSpace: 'nowrap',
-};
-
-const dragCardStyle = {
-  padding: '0.65rem 0.8rem',
-  borderRadius: '12px',
-  cursor: 'grab',
-  border: '1px solid #cbd5e1',
-  background: '#fff',
-  boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
-  userSelect: 'none',
-};
-
-const eraseCardStyle = {
-  ...dragCardStyle,
-  cursor: 'pointer',
-  borderStyle: 'dashed',
 };
 
 const actionButtonStyle = {
@@ -740,7 +712,7 @@ export const WeeklyScheduleEditor = ({
     } finally {
       setSaving(false);
     }
-  }, [rowsFromDb, restrictionRowsFromDb, assignments, restricciones, semana, anio, loadWeek, extraSlotHoras]);
+  }, [rowsFromDb, restrictionRowsFromDb, assignments, restricciones, semana, anio, loadWeek, extraSlotHoras, onAutoSaved]);
 
   useEffect(() => {
     if (!dirty || saving) return;
@@ -756,26 +728,9 @@ export const WeeklyScheduleEditor = ({
     setDragItem(payload);
   };
 
-  const handleDrop = (fecha, hora) => {
-    if (!dragItem) return;
-    applyToolToCell(dragItem, fecha, hora);
-    setDragItem(null);
-  };
-
   const beginPaint = (tool) => {
     setPaintTool(tool);
     setIsPainting(false);
-  };
-
-  const startPaintingCell = (fecha, hora) => {
-    if (!paintTool) return;
-    setIsPainting(true);
-    applyToolToCell(paintTool, fecha, hora);
-  };
-
-  const continuePaintingCell = (fecha, hora) => {
-    if (!paintTool || !isPainting) return;
-    applyToolToCell(paintTool, fecha, hora);
   };
 
   const removeAssignment = (fecha, hora) => {

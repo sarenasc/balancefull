@@ -103,7 +103,7 @@ const computeDayInfo = ({ entityId, date, groupedSlots, assignments, restriccion
 };
 
 // Barra de timeline: todos los slots del turno coloreados
-const TimelineBar = ({ turno, mySlots, colacionSlots, restrictionInfo, allTurnoSlots }) => {
+const TimelineBar = ({ turno: _turno, mySlots, colacionSlots, restrictionInfo, allTurnoSlots }) => {
   const restrictionMap = new Map(restrictionInfo.map((r) => [r.hora, r.restriction]));
   const mySet = new Set(mySlots);
   const colSet = new Set(colacionSlots);
