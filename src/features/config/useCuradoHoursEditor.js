@@ -1,24 +1,8 @@
 import { useState } from 'react';
 import { appConfig } from '../../app/config';
+import { createApiClient } from '../../services/api';
 
-const apiUrl = appConfig.apiBaseUrl;
-
-const requestJson = async (path, options = {}) => {
-  const response = await fetch(`${apiUrl}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || 'Error guardando horas de curado.');
-  }
-
-  return response.json().catch(() => ({}));
-};
+const api = createApiClient(appConfig.apiBaseUrl);
 
 export const useCuradoHoursEditor = ({
   curadoHoursConfig,
@@ -42,11 +26,8 @@ export const useCuradoHoursEditor = ({
     }));
 
     try {
-      await requestJson(`/curado-horas-config/${exportadoraId}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          horas_curado: value,
-        }),
+      await api.put(`/curado-horas-config/${exportadoraId}`, {
+        horas_curado: value,
       });
       setCuradoSuccess(`Horas de curado guardadas para exportadora ${exportadoraId}.`);
       return true;

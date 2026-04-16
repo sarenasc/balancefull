@@ -31,10 +31,12 @@ export const AppShell = ({
           <div style={{ fontSize: '1.05rem', fontWeight: 800, lineHeight: 1.2 }}>
             🍑 Balance de
             <br />
-            Operación
+            Planificacion
           </div>
           <div style={{ marginTop: '0.55rem', fontSize: '0.78rem', color: '#f59e0b', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
-            Planificación y balance
+            Planificación y balance 
+            <br/>
+            de Procesos
           </div>
         </div>
 

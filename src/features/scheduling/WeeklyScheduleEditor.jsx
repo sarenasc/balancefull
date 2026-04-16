@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { appConfig } from '../../app/config';
 import { TurnoDeliverable } from './TurnoDeliverable';
+import { createApiClient } from '../../services/api';
 
-const apiUrl = appConfig.apiBaseUrl;
+const api = createApiClient(appConfig.apiBaseUrl);
 
 const formatDateLabel = (value) =>
   new Date(`${value}T12:00:00`).toLocaleDateString('es-CL', {
@@ -62,20 +63,25 @@ const toHora = (minutes) => {
 };
 
 const requestJson = async (path, options = {}) => {
-  const response = await fetch(`${apiUrl}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
+  const method = options.method || 'GET';
 
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || 'Error de calendario.');
+  if (method === 'GET') {
+    return api.get(path);
   }
 
-  return response.json().catch(() => ({}));
+  if (method === 'POST') {
+    return api.post(path, options.body ? JSON.parse(options.body) : {});
+  }
+
+  if (method === 'PUT') {
+    return api.put(path, options.body ? JSON.parse(options.body) : {});
+  }
+
+  if (method === 'DELETE') {
+    return api.delete(path);
+  }
+
+  throw new Error(`Metodo no soportado: ${method}`);
 };
 
 const cardStyle = {

@@ -1,0 +1,143 @@
+﻿REVISION DEL SISTEMA
+Fecha: 2026-04-14
+Proyecto: \\172.20.20.5\Balance
+Contexto: despliegue principal dockerizado con frontend Nginx + backend Node/Express + SQL Server externo.
+
+Nota de configuracion actual
+
+El entorno operativo quedo funcionando con frontend en `172.20.20.5:3000` y backend publicado en `172.20.20.5:4001`. En este proyecto, usar `localhost:4001` desde el frontend no resulto equivalente al despliegue real del servidor.
+
+Puntos de mejora prioritarios
+
+1. Modularizar mas `server.cjs`.
+   Ya se extrajeron `backend/db.cjs`, `backend/logger.cjs`, `backend/health.cjs` y `backend/routes/exportadoras.cjs`. La mayor parte de los endpoints sigue concentrada en `server.cjs`, asi que el siguiente paso es separar rutas por dominio (`configuracion`, `turnos`, `balance`) para bajar acoplamiento y hacer cambios con menos riesgo.
+
+2. Mejorar logs y trazabilidad de contenedores.
+   Ya existe logging estructurado basico para arranque, requests, `request_id` y errores de proceso, pero falta extenderlo a mas endpoints para reemplazar los `catch` que aun responden `500` sin contexto. Conviene avanzar hacia helpers comunes por ruta o routers con manejo centralizado de errores.
+
+3. Terminar la limpieza de codificacion de texto.
+   Los textos visibles principales quedaron legibles y se corrigieron errores visibles en validaciones de turnos, pero todavia hay comentarios y fragmentos legacy en archivos backend con codificacion inconsistente. Conviene normalizar los archivos a UTF-8 y revisar mensajes de error/labels restantes para evitar futuras regresiones.
+
+4. Ampliar la cobertura de pruebas automáticas.
+   Ya quedó una base funcional con Vitest en `src/utils/date.test.js`, `src/services/normalizers.test.js`, `src/features/projection/projectionModel.test.js`, `src/features/balance/balanceModel.test.js`, `src/hooks/usePlannerData.test.jsx`, `src/features/config/useConfigEditor.test.jsx`, `src/features/operations/useOperationsEditor.test.jsx`, `src/features/config/ConfigSubMenu.test.jsx`, `src/features/config/ParametrosDiaEditor.test.jsx` y `src/features/scheduling/TurnoDefinitionEditor.test.jsx`. Tambien quedó estabilizado el entorno de UI al bajar `jsdom` a una version compatible con el stack actual. El siguiente paso ya no es la base de testing, sino ampliar cobertura en otros componentes críticos como `WeeklyScheduleEditor`, `OperationsEditor` visual y flujos completos de configuración.
+
+5. Fortalecer documentación operativa Docker.
+   El `README.md` actual es mínimo y no explica cómo levantar la pila, qué variables usa Compose, cómo reconstruir sin interrumpir el servicio, ni cómo verificar backend, frontend y proxy Nginx.
+
+Pendiente futuro
+
+- Evaluar un endpoint `/status` o `/version` mas detallado para diagnostico operativo. Deberia exponer version, fecha de despliegue y configuracion no sensible del proceso, sin depender de la base de datos.
+
+Observación operativa
+
+No pude verificar el estado de los contenedores desde esta sesión porque el comando `docker ps` no logró conectarse al daemon local (`dockerDesktopLinuxEngine`). La revisión Docker está basada en los archivos del proyecto: `docker-compose.yaml`, `Dockerfile.frontend`, `Dockerfile.backend`, `nginx.conf` y `.dockerignore`.
+
+Avance 2026-04-15
+
+Se avanzo en los puntos 1 y 2 de la revision:
+
+- `server.cjs` se redujo para quedar como archivo de composicion y arranque del backend.
+- Se extrajeron rutas por dominio a `backend/routes/configuracion.cjs`, `backend/routes/balance.cjs` y `backend/routes/turnos.cjs`.
+- Se agrego `backend/routes/utils.cjs` con un wrapper comun (`createRouteHandler`) para evitar repetir `try/catch` y estandarizar el manejo de errores por endpoint.
+- `backend/logger.cjs` ahora registra, ademas de `request_id`, el `method` y `path` de la request cuando un endpoint falla.
+- En la extraccion se elimino la duplicacion de endpoints de `parametros-dia` que estaba definida dos veces en `server.cjs`.
+
+Validacion realizada
+
+- Se valido sintaxis con `node --check` sobre `server.cjs`, `backend/routes/configuracion.cjs`, `backend/routes/balance.cjs` y `backend/routes/turnos.cjs`.
+- Aun no se validaron requests reales contra la API ni se reinicio el servicio desde esta sesion.
+
+Pendiente inmediato despues de este avance
+
+- Probar en runtime las rutas extraidas (`configuracion`, `balance`, `turnos`) para confirmar que no haya diferencias de carga de modulos o dependencias de entorno.
+- Extender el mismo patron de manejo de errores a otros puntos backend si aparecen nuevos routers.
+- Revisar si conviene agregar metadatos adicionales en logs de escritura (`params` o ids relevantes) sin exponer datos sensibles.
+
+Validacion 2026-04-15 posterior a la extraccion
+
+Resultados confirmados
+
+- El backend publicado en `http://172.20.20.5:4001` respondio `200` en:
+  - `/api/healthz`
+  - `/api/configuracion`
+  - `/api/totales`
+  - `/api/turnos-definicion`
+- Esto confirma que el servicio actualmente desplegado sigue operativo en esas rutas de lectura.
+
+Resultado no concluyente
+
+- Intente levantar el arbol actual refactorizado temporalmente en el puerto `4011` desde esta sesion para validar los modulos nuevos en runtime local.
+- El proceso `node \\172.20.20.5\Balance\server.cjs` quedo vivo, pero no abrio escucha observable en `127.0.0.1:4011` ni en `172.20.20.5:4011` durante la prueba.
+- No se obtuvo error visible por `stdout` o `stderr`, por lo que la causa no quedo determinada desde esta sesion.
+
+Lectura operativa
+
+- La validacion estatica de sintaxis esta correcta.
+- La validacion runtime del codigo refactorizado aun no puede darse por cerrada hasta probar el proceso directamente en el entorno de despliegue o ejecutar el backend de otra forma controlada dentro del host.
+
+Diagnostico adicional 2026-04-15 sobre validacion paralela en 4011
+
+Hallazgo principal
+
+- La ruta refactorizada `/api/configuracion` si responde correctamente en la instancia paralela cuando el backend se levanta mediante `Start-Job` dentro de la misma sesion PowerShell.
+- La traza mostro:
+  - `route_handler_started`
+  - `route_handler_finished`
+  - `request_completed` con `status: 200` y `duration_ms: 81`
+
+Causa del ruido anterior
+
+- Los intentos previos con procesos en background (`Start-Process`) sobre la ruta compartida/UNC generaban un comportamiento de ejecucion poco confiable para esta validacion.
+- Al recibir o cerrar pipes de salida, Node termino registrando un `uncaught_exception` por `EPIPE: broken pipe, write` al escribir en consola.
+- Ese `EPIPE` no indica que la ruta falle; indica que el canal de salida del proceso de prueba en background se corto mientras seguia logueando.
+
+Lectura operativa actual
+
+- La refactorizacion de rutas no quedo descartada por la validacion paralela; al menos `/api/configuracion` paso correctamente en el backend nuevo.
+- El backend publicado en `4001` no fue modificado durante estas pruebas.
+- Si se quiere probar el sistema real con estos cambios, ya no conviene seguir depurando `4011`: el siguiente paso util seria levantar o reiniciar el backend que sirve el entorno real usando este arbol actualizado.
+
+Cierre 2026-04-15 de bug funcional en balance
+
+Problema corregido
+
+- En configuracion de exportadoras, el campo `visible_linea` se guardaba correctamente, pero el balance seguia incluyendo exportadoras con visibilidad en linea desactivada.
+- La causa estaba en frontend: `src/features/balance/balanceModel.js` construia `familyEntities` filtrando por familia, pero no por `visibleLinea`.
+
+Correccion aplicada
+
+- Se ajusto `src/features/balance/balanceModel.js` para excluir entidades con `visibleLinea = 0` o `visible_linea = 0` al construir el modelo de balance.
+- Se agrego una prueba de regresion en `src/features/balance/balanceModel.test.js` para que una exportadora oculta no vuelva a aparecer en balance.
+
+Validacion funcional
+
+- Se reviso manualmente el flujo en configuracion y balance.
+- El comportamiento quedo correcto: exportadoras con visibilidad en linea = no ya no aparecen en balance, y siguen administrables desde configuracion.
+
+Despliegue realizado
+
+- Se reconstruyo y levantó `balance_backend` previamente para el refactor de backend.
+- Luego se reconstruyo y levantó `balance_frontend` para reflejar esta correccion en la interfaz.
+- El sistema quedó funcional en `172.20.20.5:3000` y `172.20.20.5:4001`.
+
+Avance sobre el siguiente frente
+
+- Se avanzo en cobertura de pruebas dejando protegido el caso de `visible_linea` en el modelo de balance.
+- La ejecucion de Vitest desde la ruta compartida UNC no quedó confiable desde esta sesion, por lo que conviene correr ese test directamente en el host con ruta local (`D:\Balance`) cuando se quiera hacer verificacion automatizada adicional.
+
+Limpieza de codificacion 2026-04-15
+
+- Se hizo una pasada adicional sobre `src` buscando mojibake visible en frontend.
+- Se corrigio el placeholder de valor cero en `src/features/balance/BalanceFamilyTable.jsx`, que mostraba un guion corrupto, y se dejo en `-` ASCII para evitar nuevas regresiones de codificacion.
+- El barrido posterior ya no detecto marcadores obvios de texto roto (`Ã`, `â`) en archivos `js` y `jsx` dentro de `src`.
+
+Nota de validacion
+
+- No se pudo usar `node --check` sobre `.jsx` porque Node no valida sintaxis directamente para esa extension en este contexto (`ERR_UNKNOWN_FILE_EXTENSION`).
+- La correccion aplicada fue puntual de texto y no cambio logica de render mas alla del placeholder visual.
+
+Barrido ampliado 2026-04-15 sobre codificacion
+
+- Se extendio la busqueda de mojibake a codigo activo y documentacion (`*.cjs`, `*.js`, `*.jsx`, `*.md`) excluyendo `node_modules`, `dist`, `.git` y `OLD`.
+- No se encontraron coincidencias obvias de texto roto (`Ã`, `â`) en el codigo vigente ni en `README.md`.
+- Con esto, la limpieza de codificacion queda razonablemente cerrada para el arbol activo del proyecto; lo que aparezca despues probablemente sera un caso puntual y no un problema sistemico del repo actual.

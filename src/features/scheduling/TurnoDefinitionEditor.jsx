@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { appConfig } from '../../app/config';
+import { createApiClient } from '../../services/api';
 
-const apiUrl = appConfig.apiBaseUrl;
+const api = createApiClient(appConfig.apiBaseUrl);
 
 const normalizeTime = (value) => {
   if (!value) return null;
@@ -12,7 +13,7 @@ const normalizeTime = (value) => {
 };
 
 const displayTime = (value) => {
-  if (!value) return '—';
+  if (!value) return '-';
 
   const raw = String(value).trim();
 
@@ -30,23 +31,6 @@ const displayTime = (value) => {
   }
 
   return raw.substring(0, 5);
-};
-
-const requestJson = async (path, options = {}) => {
-  const response = await fetch(`${apiUrl}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || 'Error en turnos.');
-  }
-
-  return response.json().catch(() => ({}));
 };
 
 export const TurnoDefinitionEditor = ({
@@ -103,10 +87,7 @@ export const TurnoDefinitionEditor = ({
       }
 
       if (editingId) {
-        await requestJson(`/turnos-definicion/${editingId}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        });
+        await api.put(`/turnos-definicion/${editingId}`, payload);
         setTurnosDefinicion((current) =>
           current.map((item) =>
             Number(item.id) === Number(editingId) ? { ...item, ...payload } : item,
@@ -114,10 +95,7 @@ export const TurnoDefinitionEditor = ({
         );
         setEditingId(null);
       } else {
-        const created = await requestJson('/turnos-definicion', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
+        const created = await api.post('/turnos-definicion', payload);
         setTurnosDefinicion((current) => {
           const exists = current.some(
             (item) => String(item.nombre).trim().toUpperCase() === String(created.nombre).trim().toUpperCase(),
@@ -152,16 +130,14 @@ export const TurnoDefinitionEditor = ({
   };
 
   const deleteTurno = async (id) => {
-    if (!window.confirm('¿Eliminar este turno?')) return;
+    if (!window.confirm('Eliminar este turno?')) return;
 
     setSaving(true);
     setError(null);
     setSuccess(null);
 
     try {
-      await requestJson(`/turnos-definicion/${id}`, {
-        method: 'DELETE',
-      });
+      await api.delete(`/turnos-definicion/${id}`);
 
       setTurnosDefinicion((current) =>
         current.filter((item) => Number(item.id) !== Number(id)),
@@ -210,7 +186,7 @@ export const TurnoDefinitionEditor = ({
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Turnos</p>
-          <h2>Definición de turnos</h2>
+          <h2>Definicion de turnos</h2>
         </div>
       </div>
 
@@ -224,7 +200,7 @@ export const TurnoDefinitionEditor = ({
         <div className="panel-heading">
           <div>
             <p className="eyebrow">{editingId ? 'Editar turno' : 'Nuevo turno'}</p>
-            <h2>{editingId ? 'Modificar definición' : 'Crear definición'}</h2>
+            <h2>{editingId ? 'Modificar definicion' : 'Crear definicion'}</h2>
           </div>
           {editingId ? (
             <button onClick={cancelEdit} style={{ padding: '0.4rem 0.8rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff', cursor: 'pointer' }}>
@@ -277,7 +253,7 @@ export const TurnoDefinitionEditor = ({
           </label>
 
           <label>
-            <div className="stat-label">Colación inicio</div>
+            <div className="stat-label">Colacion inicio</div>
             <input
               type="time"
               value={form.colacion_inicio}
@@ -289,7 +265,7 @@ export const TurnoDefinitionEditor = ({
           </label>
 
           <label>
-            <div className="stat-label">Colación fin</div>
+            <div className="stat-label">Colacion fin</div>
             <input
               type="time"
               value={form.colacion_fin}
@@ -367,11 +343,11 @@ export const TurnoDefinitionEditor = ({
               <th>Nombre</th>
               <th>Inicio</th>
               <th>Fin</th>
-              <th>Colación</th>
+              <th>Colacion</th>
               <th>H. extra inicio</th>
               <th>H. extra fin</th>
               <th>Orden</th>
-              <th>Acción</th>
+              <th>Accion</th>
             </tr>
           </thead>
           <tbody>
@@ -383,10 +359,10 @@ export const TurnoDefinitionEditor = ({
                 <td>
                   {turno.colacion_inicio
                     ? `${displayTime(turno.colacion_inicio)} - ${displayTime(turno.colacion_fin)}`
-                    : '—'}
+                    : '-'}
                 </td>
-                <td>{turno.horas_extra_inicio != null ? `${turno.horas_extra_inicio}h` : '—'}</td>
-                <td>{turno.horas_extra != null ? `${turno.horas_extra}h` : '—'}</td>
+                <td>{turno.horas_extra_inicio != null ? `${turno.horas_extra_inicio}h` : '-'}</td>
+                <td>{turno.horas_extra != null ? `${turno.horas_extra}h` : '-'}</td>
                 <td>{turno.orden}</td>
                 <td style={{ display: 'flex', gap: '0.4rem' }}>
                   <button

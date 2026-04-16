@@ -1,30 +1,8 @@
 import { useState } from 'react';
 import { appConfig } from '../../app/config';
+import { createApiClient, readList } from '../../services/api';
 
-const apiUrl = appConfig.apiBaseUrl;
-
-const requestJson = async (path, options = {}) => {
-  const response = await fetch(`${apiUrl}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
-
-  if (!response.ok) {
-    let message = 'No fue posible guardar.';
-    try {
-      const text = await response.text();
-      message = text || message;
-    } catch (_error) {
-      // noop
-    }
-    throw new Error(message);
-  }
-
-  return response.json().catch(() => ({}));
-};
+const api = createApiClient(appConfig.apiBaseUrl);
 
 const toEntityShape = (row, especies = []) => {
   const especie = especies.find((item) => Number(item.id) === Number(row.especie_id));
@@ -60,8 +38,8 @@ export const useAdvancedConfigEditor = ({
 
   const loadTemporadas = async () => {
     try {
-      const rows = await requestJson('/temporadas-familia');
-      setTemporadasFamilia(Array.isArray(rows) ? rows : []);
+      const rows = await readList(api, '/temporadas-familia');
+      setTemporadasFamilia(rows);
     } catch (_error) {
       setTemporadasFamilia([]);
     }
@@ -72,14 +50,11 @@ export const useAdvancedConfigEditor = ({
     clearStatus();
 
     try {
-      const saved = await requestJson('/temporadas-familia', {
-        method: 'POST',
-        body: JSON.stringify({
-          familia_id: Number(payload.familia_id),
-          fecha_inicio: payload.fecha_inicio,
-          fecha_fin: payload.fecha_fin,
-          activa: payload.activa === undefined ? 1 : (payload.activa ? 1 : 0),
-        }),
+      const saved = await api.post('/temporadas-familia', {
+        familia_id: Number(payload.familia_id),
+        fecha_inicio: payload.fecha_inicio,
+        fecha_fin: payload.fecha_fin,
+        activa: payload.activa === undefined ? 1 : (payload.activa ? 1 : 0),
       });
 
       const family = familias.find((item) => Number(item.id) === Number(payload.familia_id));
@@ -119,15 +94,12 @@ export const useAdvancedConfigEditor = ({
     clearStatus();
 
     try {
-      const saved = await requestJson('/exportadoras', {
-        method: 'POST',
-        body: JSON.stringify({
-          nombre: payload.nombre,
-          especie_id: payload.especie_id ? Number(payload.especie_id) : null,
-          variedad: payload.variedad,
-          color_idx: Number(payload.color_idx || 0),
-          visible_linea: payload.visible_linea === undefined ? 1 : (payload.visible_linea ? 1 : 0),
-        }),
+      const saved = await api.post('/exportadoras', {
+        nombre: payload.nombre,
+        especie_id: payload.especie_id ? Number(payload.especie_id) : null,
+        variedad: payload.variedad,
+        color_idx: Number(payload.color_idx || 0),
+        visible_linea: payload.visible_linea === undefined ? 1 : (payload.visible_linea ? 1 : 0),
       });
 
       const nextEntity = toEntityShape(saved, especies);
@@ -166,16 +138,13 @@ export const useAdvancedConfigEditor = ({
     );
 
     try {
-      await requestJson(`/exportadoras/${payload.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          nombre: payload.nombre,
-          especie_id: payload.especie_id ? Number(payload.especie_id) : null,
-          variedad: payload.variedad,
-          color_idx: Number(payload.color_idx || 0),
-          visible_linea: payload.visible_linea ? 1 : 0,
-          activa: 1,
-        }),
+      await api.put(`/exportadoras/${payload.id}`, {
+        nombre: payload.nombre,
+        especie_id: payload.especie_id ? Number(payload.especie_id) : null,
+        variedad: payload.variedad,
+        color_idx: Number(payload.color_idx || 0),
+        visible_linea: payload.visible_linea ? 1 : 0,
+        activa: 1,
       });
 
       setAdminSuccess(`Exportadora ${payload.nombre} actualizada.`);

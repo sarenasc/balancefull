@@ -8,6 +8,7 @@ import { createProjectionMetrics } from '../features/projection/projectionModel'
 import { BalanceBoard } from '../features/balance/BalanceBoard';
 import { WeeklyScheduleEditor } from '../features/scheduling/WeeklyScheduleEditor';
 import { usePlannerData } from '../hooks/usePlannerData';
+import { createApiClient, readList } from '../services/api';
 
 const panelHintStyle = {
   marginBottom: '1rem',
@@ -17,6 +18,8 @@ const panelHintStyle = {
   background: '#fff',
   boxShadow: '0 6px 18px rgba(15, 23, 42, 0.05)',
 };
+
+const api = createApiClient(appConfig.apiBaseUrl);
 
 export const App = () => {
   const planner = usePlannerData();
@@ -105,9 +108,7 @@ export const App = () => {
   useEffect(() => {
     const loadCuradoHours = async () => {
       try {
-        const response = await fetch(`${appConfig.apiBaseUrl}/curado-horas-config`);
-        if (!response.ok) throw new Error('No fue posible cargar horas de curado');
-        const rows = await response.json();
+        const rows = await readList(api, '/curado-horas-config');
         const map = {};
         rows.forEach((row) => {
           map[Number(row.exportadora_id)] = Number(row.horas_curado);
@@ -124,9 +125,7 @@ export const App = () => {
   useEffect(() => {
     const loadTurnosDefinicion = async () => {
       try {
-        const response = await fetch(`${appConfig.apiBaseUrl}/turnos-definicion`);
-        if (!response.ok) throw new Error('No fue posible cargar turnos');
-        const rows = await response.json();
+        const rows = await readList(api, '/turnos-definicion');
         setTurnosDefinicion(rows);
       } catch (_error) {
         setTurnosDefinicion([]);
@@ -139,9 +138,7 @@ export const App = () => {
   useEffect(() => {
     const loadTiposRestriccion = async () => {
       try {
-        const response = await fetch(`${appConfig.apiBaseUrl}/tipos-restriccion`);
-        if (!response.ok) throw new Error('No fue posible cargar restricciones');
-        const rows = await response.json();
+        const rows = await readList(api, '/tipos-restriccion');
         setTiposRestriccion(rows);
       } catch (_error) {
         setTiposRestriccion([]);
@@ -151,28 +148,24 @@ export const App = () => {
     loadTiposRestriccion();
   }, []);
 
-  useEffect(() => {
-    const loadParametrosDia = async () => {
-      try {
-        const response = await fetch(`${appConfig.apiBaseUrl}/parametros-dia`);
-        if (!response.ok) throw new Error('No fue posible cargar parámetros por día');
-        const rows = await response.json();
-        setParametrosDia(Array.isArray(rows) ? rows : []);
-      } catch (_error) {
-        setParametrosDia([]);
-      }
-    };
-
-    loadParametrosDia();
+  const reloadParametrosDia = useCallback(async () => {
+    try {
+      const rows = await readList(api, '/parametros-dia');
+      setParametrosDia(rows);
+    } catch (_error) {
+      setParametrosDia([]);
+    }
   }, []);
+
+  useEffect(() => {
+    reloadParametrosDia();
+  }, [reloadParametrosDia]);
 
   useEffect(() => {
     const loadHorasExtraDia = async () => {
       try {
-        const response = await fetch(`${appConfig.apiBaseUrl}/horas-extra-dia`);
-        if (!response.ok) throw new Error('No fue posible cargar horas extra');
-        const rows = await response.json();
-        setHorasExtraDia(Array.isArray(rows) ? rows : []);
+        const rows = await readList(api, '/horas-extra-dia');
+        setHorasExtraDia(rows);
       } catch (_error) {
         setHorasExtraDia([]);
       }
@@ -323,6 +316,7 @@ export const App = () => {
       setTurnosDefinicion={setTurnosDefinicion}
       tiposRestriccion={tiposRestriccion}
       setTiposRestriccion={setTiposRestriccion}
+      onParametrosDiaChanged={reloadParametrosDia}
     />
   );
 

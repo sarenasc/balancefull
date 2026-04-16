@@ -215,6 +215,7 @@ const renderRows = (rows, dates, holidaySet, currentWeekLabel, options = {}) => 
         const key = `${row.field}_${row.entityId}_${date}`;
         const entity = entityMap.get(Number(row.entityId));
 
+
         const binsPerHour = row.binsPerHourValues?.[date];
         const isOverride = row.isOverrideValues?.[date];
 
@@ -287,6 +288,24 @@ const renderRows = (rows, dates, holidaySet, currentWeekLabel, options = {}) => 
           </td>
         );
       })}
+      <td
+        style={{
+          position: 'sticky',
+          right: 0,
+          zIndex: 3,
+          background: rowIndex % 2 === 0 ? palette.leftCell : palette.leftCellAlt,
+          border: `1px solid ${palette.shellBorder}`,
+          boxShadow: '-1px 0 0 rgba(34,50,74,0.95)',
+          padding: '0.48rem 0.6rem',
+          textAlign: 'center',
+          color: '#fbbf24',
+          fontWeight: 700,
+          minWidth: '90px',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {formatNumber(dates.reduce((sum, date) => sum + Number(row.values?.[date] || 0), 0))}
+      </td>
     </tr>
   ));
 };
@@ -333,6 +352,24 @@ const renderTotalRow = ({
         </td>
       );
     })}
+    <td
+      style={{
+        position: 'sticky',
+        right: 0,
+        zIndex: 3,
+        background: palette.totalStrong,
+        border: `1px solid ${palette.shellBorder}`,
+        boxShadow: '-1px 0 0 rgba(34,50,74,0.95)',
+        padding: '0.48rem 0.6rem',
+        textAlign: 'center',
+        color: valueColor,
+        fontWeight: 800,
+        minWidth: '90px',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {formatNumber(dates.reduce((sum, date) => sum + Number(values?.[date] || 0), 0), digits)}
+    </td>
   </tr>
 );
 
@@ -362,6 +399,17 @@ const renderSectionRow = (label, dates) => (
         }}
       />
     ))}
+    <td
+      style={{
+        position: 'sticky',
+        right: 0,
+        zIndex: 3,
+        background: palette.section,
+        border: `1px solid ${palette.shellBorder}`,
+        height: '28px',
+        minWidth: '90px',
+      }}
+    />
   </tr>
 );
 
@@ -658,6 +706,18 @@ export const BalanceFamilyTable = ({
                     </th>
                   );
                 })}
+                <th
+                  style={{
+                    ...leftCellBaseStyle,
+                    position: 'sticky',
+                    right: 0,
+                    zIndex: 6,
+                    background: palette.leftHeader,
+                    boxShadow: '-1px 0 0 rgba(34,50,74,0.95)',
+                    minWidth: '90px',
+                    textAlign: 'center',
+                  }}
+                />
               </tr>
               <tr>
                 <th style={{ ...leftCellBaseStyle, ...stickyColumnStyle(0, 190, palette.leftHeader), zIndex: 6, color: '#94a3b8' }}>
@@ -701,6 +761,22 @@ export const BalanceFamilyTable = ({
                     </th>
                   );
                 })}
+                <th
+                  style={{
+                    ...leftCellBaseStyle,
+                    position: 'sticky',
+                    right: 0,
+                    zIndex: 6,
+                    background: palette.leftHeader,
+                    boxShadow: '-1px 0 0 rgba(34,50,74,0.95)',
+                    color: '#fbbf24',
+                    minWidth: '90px',
+                    textAlign: 'center',
+                    fontWeight: 800,
+                  }}
+                >
+                  Total Temp.
+                </th>
               </tr>
             </thead>
 
@@ -799,6 +875,17 @@ export const BalanceFamilyTable = ({
                       </td>
                     );
                   })}
+                  <td
+                    style={{
+                      position: 'sticky',
+                      right: 0,
+                      zIndex: 3,
+                      background: rowIndex % 2 === 0 ? palette.leftCell : palette.leftCellAlt,
+                      border: `1px solid ${palette.shellBorder}`,
+                      boxShadow: '-1px 0 0 rgba(34,50,74,0.95)',
+                      minWidth: '90px',
+                    }}
+                  />
                 </tr>
               ))}
               {renderTotalRow({

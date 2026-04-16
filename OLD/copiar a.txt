@@ -1,0 +1,7 @@
+Archivos modificados en \\172.20.20.5\Balance
+================================================
+
+src/app/App.jsx
+src/features/config/ConfigEditor.jsx
+src/features/config/ParametrosDiaEditor.jsx
+src/features/balance/BalanceFamilyTable.jsx

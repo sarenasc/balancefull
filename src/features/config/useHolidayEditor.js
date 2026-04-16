@@ -1,24 +1,8 @@
 import { useState } from 'react';
 import { appConfig } from '../../app/config';
+import { createApiClient } from '../../services/api';
 
-const apiUrl = appConfig.apiBaseUrl;
-
-const requestJson = async (path, options = {}) => {
-  const response = await fetch(`${apiUrl}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || 'Error de feriados.');
-  }
-
-  return response.json().catch(() => ({}));
-};
+const api = createApiClient(appConfig.apiBaseUrl);
 
 export const useHolidayEditor = ({
   holidays,
@@ -50,10 +34,7 @@ export const useHolidayEditor = ({
     });
 
     try {
-      await requestJson('/feriados', {
-        method: 'POST',
-        body: JSON.stringify({ fecha, nombre }),
-      });
+      await api.post('/feriados', { fecha, nombre });
       setHolidaySuccess(`Feriado ${fecha} guardado correctamente.`);
       return true;
     } catch (error) {
@@ -78,10 +59,7 @@ export const useHolidayEditor = ({
     );
 
     try {
-      await requestJson(`/feriados/${fecha}`, {
-        method: 'PUT',
-        body: JSON.stringify({ nombre }),
-      });
+      await api.put(`/feriados/${fecha}`, { nombre });
       setHolidaySuccess(`Feriado ${fecha} actualizado correctamente.`);
       return true;
     } catch (error) {
@@ -102,9 +80,7 @@ export const useHolidayEditor = ({
     setHolidays((current) => current.filter((item) => getFecha(item) !== fecha));
 
     try {
-      await requestJson(`/feriados/${fecha}`, {
-        method: 'DELETE',
-      });
+      await api.delete(`/feriados/${fecha}`);
       setHolidaySuccess(`Feriado ${fecha} eliminado correctamente.`);
       return true;
     } catch (error) {

@@ -46,6 +46,7 @@ export const ConfigEditor = ({
   setTurnosDefinicion,
   tiposRestriccion,
   setTiposRestriccion,
+  onParametrosDiaChanged,
 }) => {
   const [activeTab, setActiveTab] = useState('parametros');
   const [form, setForm] = useState({
@@ -908,7 +909,7 @@ export const ConfigEditor = ({
       case 'curado':
         return renderCurado();
       case 'parametros-dia':
-        return <ParametrosDiaEditor entities={entities} />;
+        return <ParametrosDiaEditor entities={entities} onSaved={onParametrosDiaChanged} />;
       case 'turnos':
         return (
           <TurnoDefinitionEditor

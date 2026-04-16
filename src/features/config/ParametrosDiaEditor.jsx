@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { appConfig } from '../../app/config';
+import { createApiClient, readList } from '../../services/api';
 
-const apiUrl = appConfig.apiBaseUrl;
+const api = createApiClient(appConfig.apiBaseUrl);
 
 const inputStyle = {
   width: '100%',
@@ -30,7 +31,7 @@ const buttonSecondaryStyle = {
 
 const normalizeDate = (value) => (value ? String(value).slice(0, 10) : '');
 
-export default function ParametrosDiaEditor({ entities = [] }) {
+export default function ParametrosDiaEditor({ entities = [], onSaved = () => {} }) {
   const [rows, setRows] = useState([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -53,10 +54,8 @@ export default function ParametrosDiaEditor({ entities = [] }) {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`${apiUrl}/parametros-dia`);
-      if (!response.ok) throw new Error('No fue posible cargar parámetros por día.');
-      const json = await response.json();
-      setRows(Array.isArray(json) ? json : []);
+      const json = await readList(api, '/parametros-dia');
+      setRows(json);
     } catch (loadError) {
       setError(loadError.message);
       setRows([]);
@@ -100,26 +99,18 @@ export default function ParametrosDiaEditor({ entities = [] }) {
     setMessage('');
 
     try {
-      const response = await fetch(`${apiUrl}/parametros-dia`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          exportadora_id: Number(form.exportadora_id),
-          especie_id: form.especie_id ? Number(form.especie_id) : null,
-          variedad: form.variedad || '',
-          fecha: form.fecha,
-          bins_por_hora: Number(form.bins_por_hora),
-        }),
+      await api.post('/parametros-dia', {
+        exportadora_id: Number(form.exportadora_id),
+        especie_id: form.especie_id ? Number(form.especie_id) : null,
+        variedad: form.variedad || '',
+        fecha: form.fecha,
+        bins_por_hora: Number(form.bins_por_hora),
       });
 
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || 'No fue posible guardar el parámetro del día.');
-      }
-
-      setMessage('Parámetro del día guardado correctamente.');
+      setMessage('Parametro del dia guardado correctamente.');
       resetForm();
       await loadRows();
+      onSaved();
     } catch (saveError) {
       setError(saveError.message);
     } finally {
@@ -140,24 +131,17 @@ export default function ParametrosDiaEditor({ entities = [] }) {
   };
 
   const deleteRow = async (id) => {
-    if (!window.confirm('¿Eliminar este parámetro diario?')) return;
+    if (!window.confirm('Eliminar este parametro diario?')) return;
 
     setSaving(true);
     setError('');
     setMessage('');
 
     try {
-      const response = await fetch(`${apiUrl}/parametros-dia/${id}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || 'No fue posible eliminar el parámetro del día.');
-      }
-
-      setMessage('Parámetro del día eliminado.');
+      await api.delete(`/parametros-dia/${id}`);
+      setMessage('Parametro del dia eliminado.');
       await loadRows();
+      onSaved();
     } catch (deleteError) {
       setError(deleteError.message);
     } finally {
@@ -169,7 +153,7 @@ export default function ParametrosDiaEditor({ entities = [] }) {
     <div className="panel panel--compact" style={{ marginBottom: '1rem' }}>
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">Parámetros día</p>
+          <p className="eyebrow">Parametros dia</p>
           <h2>Override diario de bins por hora</h2>
         </div>
       </div>
@@ -244,7 +228,7 @@ export default function ParametrosDiaEditor({ entities = [] }) {
         }}
       >
         Si existe un registro para una exportadora en una fecha, ese <strong>bins por hora</strong>
-        se usa solo ese día para calcular las horas de proceso.
+        {' '}se usa solo ese dia para calcular las horas de proceso.
       </div>
 
       <div className="table-wrap">
@@ -256,7 +240,7 @@ export default function ParametrosDiaEditor({ entities = [] }) {
               <th>Variedad</th>
               <th>Fecha</th>
               <th>Bins/hora</th>
-              <th>Acción</th>
+              <th>Accion</th>
             </tr>
           </thead>
           <tbody>
@@ -265,8 +249,8 @@ export default function ParametrosDiaEditor({ entities = [] }) {
               return (
                 <tr key={row.id}>
                   <td>{entity?.exportadora || row.exportadora_id}</td>
-                  <td>{entity?.especie || row.especie_id || '—'}</td>
-                  <td>{row.variedad || entity?.variedad || '—'}</td>
+                  <td>{entity?.especie || row.especie_id || '-'}</td>
+                  <td>{row.variedad || entity?.variedad || '-'}</td>
                   <td>{normalizeDate(row.fecha)}</td>
                   <td>{row.bins_por_hora}</td>
                   <td>
@@ -289,7 +273,7 @@ export default function ParametrosDiaEditor({ entities = [] }) {
             {!rows.length && !loading ? (
               <tr>
                 <td colSpan="6" style={{ textAlign: 'center', color: '#64748b' }}>
-                  No hay parámetros diarios registrados.
+                  No hay parametros diarios registrados.
                 </td>
               </tr>
             ) : null}

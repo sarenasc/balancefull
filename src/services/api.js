@@ -31,5 +31,19 @@ export const createApiClient = (baseUrl) => {
         method: 'POST',
         body: JSON.stringify(body),
       }),
+    put: (path, body) =>
+      request(path, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      }),
+    delete: (path) =>
+      request(path, {
+        method: 'DELETE',
+      }),
   };
+};
+
+export const readList = async (client, path) => {
+  const rows = await client.get(path);
+  return Array.isArray(rows) ? rows : [];
 };

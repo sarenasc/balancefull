@@ -1,24 +1,8 @@
 import { useMemo, useState } from 'react';
 import { appConfig } from '../../app/config';
+import { createApiClient } from '../../services/api';
 
-const apiUrl = appConfig.apiBaseUrl;
-
-const requestJson = async (path, options = {}) => {
-  const response = await fetch(`${apiUrl}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || 'Error en restricciones.');
-  }
-
-  return response.json().catch(() => ({}));
-};
+const api = createApiClient(appConfig.apiBaseUrl);
 
 export const RestrictionTypeEditor = ({
   tiposRestriccion,
@@ -46,13 +30,13 @@ export const RestrictionTypeEditor = ({
 
     try {
       if (!form.nombre.trim()) {
-        throw new Error('El nombre del tipo de restricción es obligatorio.');
+        throw new Error('El nombre del tipo de restriccion es obligatorio.');
       }
 
       if (editingId) {
-        await requestJson(`/tipos-restriccion/${editingId}`, {
-          method: 'PUT',
-          body: JSON.stringify({ nombre: form.nombre.trim(), color: form.color || '#dc2626' }),
+        await api.put(`/tipos-restriccion/${editingId}`, {
+          nombre: form.nombre.trim(),
+          color: form.color || '#dc2626',
         });
         setTiposRestriccion((current) =>
           current.map((item) =>
@@ -63,12 +47,9 @@ export const RestrictionTypeEditor = ({
         );
         setEditingId(null);
       } else {
-        const created = await requestJson('/tipos-restriccion', {
-          method: 'POST',
-          body: JSON.stringify({
-            nombre: form.nombre.trim(),
-            color: form.color || '#dc2626',
-          }),
+        const created = await api.post('/tipos-restriccion', {
+          nombre: form.nombre.trim(),
+          color: form.color || '#dc2626',
         });
         setTiposRestriccion((current) => {
           const exists = current.some((item) => Number(item.id) === Number(created.id));
@@ -81,7 +62,7 @@ export const RestrictionTypeEditor = ({
         });
       }
 
-      setSuccess(`Tipo de restricción ${form.nombre} guardado correctamente.`);
+      setSuccess(`Tipo de restriccion ${form.nombre} guardado correctamente.`);
       setForm({ nombre: '', color: '#dc2626' });
     } catch (saveError) {
       setError(saveError.message);
@@ -103,22 +84,20 @@ export const RestrictionTypeEditor = ({
   };
 
   const deleteTipo = async (id) => {
-    if (!window.confirm('¿Eliminar este tipo de restricción?')) return;
+    if (!window.confirm('Eliminar este tipo de restriccion?')) return;
 
     setSaving(true);
     setError(null);
     setSuccess(null);
 
     try {
-      await requestJson(`/tipos-restriccion/${id}`, {
-        method: 'DELETE',
-      });
+      await api.delete(`/tipos-restriccion/${id}`);
 
       setTiposRestriccion((current) =>
         current.filter((item) => Number(item.id) !== Number(id)),
       );
 
-      setSuccess('Tipo de restricción eliminado correctamente.');
+      setSuccess('Tipo de restriccion eliminado correctamente.');
     } catch (deleteError) {
       setError(deleteError.message);
     } finally {
@@ -131,7 +110,7 @@ export const RestrictionTypeEditor = ({
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Restricciones</p>
-          <h2>Tipos de restricción</h2>
+          <h2>Tipos de restriccion</h2>
         </div>
       </div>
 
@@ -198,7 +177,7 @@ export const RestrictionTypeEditor = ({
               <th>Nombre</th>
               <th>Color</th>
               <th>Vista</th>
-              <th>Acción</th>
+              <th>Accion</th>
             </tr>
           </thead>
           <tbody>

@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { appConfig } from '../../app/config';
 import { getCuradoReleaseDate } from '../../utils/date';
+import { createApiClient } from '../../services/api';
 
-const apiUrl = appConfig.apiBaseUrl;
+const api = createApiClient(appConfig.apiBaseUrl);
 
 const saveCellBySection = async ({ section, entityId, temporadaId, date, value }) => {
   const endpointMap = {
@@ -13,28 +14,15 @@ const saveCellBySection = async ({ section, entityId, temporadaId, date, value }
 
   const endpoint = endpointMap[section];
   if (!endpoint) {
-    throw new Error(`Sección no soportada: ${section}`);
+    throw new Error(`Seccion no soportada: ${section}`);
   }
 
-  const response = await fetch(`${apiUrl}${endpoint}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      exportadora_id: entityId,
-      temporada_id: temporadaId,
-      fecha: date,
-      bins: value,
-    }),
+  return api.post(endpoint, {
+    exportadora_id: entityId,
+    temporada_id: temporadaId,
+    fecha: date,
+    bins: value,
   });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || 'No fue posible guardar la celda.');
-  }
-
-  return response.json().catch(() => ({}));
 };
 
 export const useOperationsEditor = ({
@@ -68,7 +56,6 @@ export const useOperationsEditor = ({
     return balance;
   };
 
-
   const setDraftCell = ({ entityId, date, field, rawValue }) => {
     setData((current) => ({
       ...current,
@@ -86,7 +73,7 @@ export const useOperationsEditor = ({
     const numericValue = Number(value);
 
     if (Number.isNaN(numericValue) || numericValue < 0) {
-      setError('Solo se permiten números mayores o iguales a 0.');
+      setError('Solo se permiten numeros mayores o iguales a 0.');
       return false;
     }
 
@@ -103,13 +90,7 @@ export const useOperationsEditor = ({
         (useCurado ? Number(row.curado || 0) : Number(row.cosecha || 0));
 
       const nextBalance = baseBalance - numericValue;
-
-      /*if (nextBalance < 0) {
-        const ok = window.confirm(
-          `El balance quedará negativo (${nextBalance}). ¿Deseas guardar de todas formas?`,
-        );
-        if (!ok) return false;
-      }*/
+      void nextBalance;
     }
 
     setError(null);

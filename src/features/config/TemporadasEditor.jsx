@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { appConfig } from '../../app/config';
+import { createApiClient } from '../../services/api';
 
-const apiUrl = appConfig.apiBaseUrl;
+const api = createApiClient(appConfig.apiBaseUrl);
 
 const inputStyle = {
   width: '100%',
@@ -55,21 +56,12 @@ export default function TemporadasEditor({ familias = [], setFamilias }) {
     setMessage('');
 
     try {
-      const response = await fetch(`${apiUrl}/temporadas-familia`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          familia_id: Number(familia.id),
-          fecha_inicio: values.fecha_inicio,
-          fecha_fin: values.fecha_fin,
-          activa: 1,
-        }),
+      await api.post('/temporadas-familia', {
+        familia_id: Number(familia.id),
+        fecha_inicio: values.fecha_inicio,
+        fecha_fin: values.fecha_fin,
+        activa: 1,
       });
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || 'No fue posible guardar la temporada.');
-      }
 
       if (typeof setFamilias === 'function') {
         setFamilias((current) =>
@@ -113,7 +105,7 @@ export default function TemporadasEditor({ familias = [], setFamilias }) {
               <th>Usa curado</th>
               <th>Fecha inicio</th>
               <th>Fecha fin</th>
-              <th>Acción</th>
+              <th>Accion</th>
             </tr>
           </thead>
           <tbody>
@@ -122,7 +114,7 @@ export default function TemporadasEditor({ familias = [], setFamilias }) {
               return (
                 <tr key={familia.id}>
                   <td>{familia.nombre}</td>
-                  <td>{familia.usa_curado ? 'Sí' : 'No'}</td>
+                  <td>{familia.usa_curado ? 'Si' : 'No'}</td>
                   <td>
                     <input
                       type="date"

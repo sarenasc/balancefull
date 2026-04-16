@@ -269,7 +269,9 @@ export const buildBalanceModel = ({
       const familyDates = buildFamilyDateRange(familia, dates);
 
       const familyEntities = entities.filter(
-        (entity) => Number(entityFamilyMap.get(Number(entity.id))) === familyId,
+        (entity) =>
+          Number(entityFamilyMap.get(Number(entity.id))) === familyId &&
+          Number(entity?.visibleLinea ?? entity?.visible_linea ?? 1) === 1,
       );
 
       const { sections, totals } = buildFamilySections({

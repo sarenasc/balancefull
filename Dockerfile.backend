@@ -3,5 +3,6 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
 COPY server.cjs ./server.cjs
+COPY backend ./backend
 EXPOSE 4001
 CMD ["node", "server.cjs"]
