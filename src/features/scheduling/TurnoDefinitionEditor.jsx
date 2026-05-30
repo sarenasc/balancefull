@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { appConfig } from '../../app/config';
+import { createApiClient } from '../../services/api';
 
-const apiUrl = appConfig.apiBaseUrl;
+const api = createApiClient(appConfig.apiBaseUrl);
 
 const normalizeTime = (value) => {
   if (!value) return null;
@@ -12,7 +13,7 @@ const normalizeTime = (value) => {
 };
 
 const displayTime = (value) => {
-  if (!value) return '—';
+  if (!value) return '-';
 
   const raw = String(value).trim();
 
@@ -32,23 +33,6 @@ const displayTime = (value) => {
   return raw.substring(0, 5);
 };
 
-const requestJson = async (path, options = {}) => {
-  const response = await fetch(`${apiUrl}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || 'Error en turnos.');
-  }
-
-  return response.json().catch(() => ({}));
-};
-
 export const TurnoDefinitionEditor = ({
   turnosDefinicion,
   setTurnosDefinicion,
@@ -60,8 +44,11 @@ export const TurnoDefinitionEditor = ({
     colacion_inicio: '',
     colacion_fin: '',
     orden: 1,
+    horas_extra: '',
+    horas_extra_inicio: '',
   });
 
+  const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -87,6 +74,8 @@ export const TurnoDefinitionEditor = ({
         colacion_inicio: form.colacion_inicio ? normalizeTime(form.colacion_inicio) : null,
         colacion_fin: form.colacion_fin ? normalizeTime(form.colacion_fin) : null,
         orden: Number(form.orden || 0),
+        horas_extra: form.horas_extra !== '' ? Number(form.horas_extra) : null,
+        horas_extra_inicio: form.horas_extra_inicio !== '' ? Number(form.horas_extra_inicio) : null,
       };
 
       if (!payload.nombre.trim()) {
@@ -97,26 +86,30 @@ export const TurnoDefinitionEditor = ({
         throw new Error('hora_inicio y hora_fin son obligatorias.');
       }
 
-      const created = await requestJson('/turnos-definicion', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-
-      setTurnosDefinicion((current) => {
-        const exists = current.some(
-          (item) => String(item.nombre).trim().toUpperCase() === String(created.nombre).trim().toUpperCase(),
+      if (editingId) {
+        await api.put(`/turnos-definicion/${editingId}`, payload);
+        setTurnosDefinicion((current) =>
+          current.map((item) =>
+            Number(item.id) === Number(editingId) ? { ...item, ...payload } : item,
+          ),
         );
-
-        if (exists) {
-          return current.map((item) =>
-            String(item.nombre).trim().toUpperCase() === String(created.nombre).trim().toUpperCase()
-              ? created
-              : item,
+        setEditingId(null);
+      } else {
+        const created = await api.post('/turnos-definicion', payload);
+        setTurnosDefinicion((current) => {
+          const exists = current.some(
+            (item) => String(item.nombre).trim().toUpperCase() === String(created.nombre).trim().toUpperCase(),
           );
-        }
-
-        return [...current, created];
-      });
+          if (exists) {
+            return current.map((item) =>
+              String(item.nombre).trim().toUpperCase() === String(created.nombre).trim().toUpperCase()
+                ? created
+                : item,
+            );
+          }
+          return [...current, created];
+        });
+      }
 
       setSuccess(`Turno ${payload.nombre} guardado correctamente.`);
       setForm({
@@ -126,6 +119,8 @@ export const TurnoDefinitionEditor = ({
         colacion_inicio: '',
         colacion_fin: '',
         orden: (orderedTurnos.length || 0) + 1,
+        horas_extra: '',
+        horas_extra_inicio: '',
       });
     } catch (saveError) {
       setError(saveError.message);
@@ -135,16 +130,14 @@ export const TurnoDefinitionEditor = ({
   };
 
   const deleteTurno = async (id) => {
-    if (!window.confirm('¿Eliminar este turno?')) return;
+    if (!window.confirm('Eliminar este turno?')) return;
 
     setSaving(true);
     setError(null);
     setSuccess(null);
 
     try {
-      await requestJson(`/turnos-definicion/${id}`, {
-        method: 'DELETE',
-      });
+      await api.delete(`/turnos-definicion/${id}`);
 
       setTurnosDefinicion((current) =>
         current.filter((item) => Number(item.id) !== Number(id)),
@@ -158,12 +151,42 @@ export const TurnoDefinitionEditor = ({
     }
   };
 
+  const editTurno = (turno) => {
+    setEditingId(turno.id);
+    setForm({
+      nombre: turno.nombre || '',
+      hora_inicio: displayTime(turno.hora_inicio),
+      hora_fin: displayTime(turno.hora_fin),
+      colacion_inicio: turno.colacion_inicio ? displayTime(turno.colacion_inicio) : '',
+      colacion_fin: turno.colacion_fin ? displayTime(turno.colacion_fin) : '',
+      orden: turno.orden ?? 0,
+      horas_extra: turno.horas_extra != null ? String(turno.horas_extra) : '',
+      horas_extra_inicio: turno.horas_extra_inicio != null ? String(turno.horas_extra_inicio) : '',
+    });
+    setError(null);
+    setSuccess(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setForm({
+      nombre: '',
+      hora_inicio: '08:00',
+      hora_fin: '17:00',
+      colacion_inicio: '',
+      colacion_fin: '',
+      orden: (orderedTurnos.length || 0) + 1,
+      horas_extra: '',
+      horas_extra_inicio: '',
+    });
+  };
+
   return (
     <section className="panel">
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Turnos</p>
-          <h2>Definición de turnos</h2>
+          <h2>Definicion de turnos</h2>
         </div>
       </div>
 
@@ -172,13 +195,18 @@ export const TurnoDefinitionEditor = ({
 
       <div
         className="panel panel--compact"
-        style={{ marginBottom: '1rem' }}
+        style={{ marginBottom: '1rem', borderColor: editingId ? '#2563eb' : undefined }}
       >
         <div className="panel-heading">
           <div>
-            <p className="eyebrow">Nuevo turno</p>
-            <h2>Crear definición</h2>
+            <p className="eyebrow">{editingId ? 'Editar turno' : 'Nuevo turno'}</p>
+            <h2>{editingId ? 'Modificar definicion' : 'Crear definicion'}</h2>
           </div>
+          {editingId ? (
+            <button onClick={cancelEdit} style={{ padding: '0.4rem 0.8rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff', cursor: 'pointer' }}>
+              Cancelar
+            </button>
+          ) : null}
         </div>
 
         <div
@@ -225,7 +253,7 @@ export const TurnoDefinitionEditor = ({
           </label>
 
           <label>
-            <div className="stat-label">Colación inicio</div>
+            <div className="stat-label">Colacion inicio</div>
             <input
               type="time"
               value={form.colacion_inicio}
@@ -237,7 +265,7 @@ export const TurnoDefinitionEditor = ({
           </label>
 
           <label>
-            <div className="stat-label">Colación fin</div>
+            <div className="stat-label">Colacion fin</div>
             <input
               type="time"
               value={form.colacion_fin}
@@ -261,6 +289,36 @@ export const TurnoDefinitionEditor = ({
             />
           </label>
 
+          <label>
+            <div className="stat-label">Horas extra al final</div>
+            <input
+              type="number"
+              min="0"
+              step="0.5"
+              value={form.horas_extra}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, horas_extra: event.target.value }))
+              }
+              placeholder="ej. 2"
+              style={{ width: '100%', marginTop: '0.4rem', padding: '0.6rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
+            />
+          </label>
+
+          <label>
+            <div className="stat-label">Horas extra al inicio</div>
+            <input
+              type="number"
+              min="0"
+              step="0.5"
+              value={form.horas_extra_inicio}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, horas_extra_inicio: event.target.value }))
+              }
+              placeholder="ej. 2"
+              style={{ width: '100%', marginTop: '0.4rem', padding: '0.6rem', borderRadius: '10px', border: '1px solid #cbd5e1' }}
+            />
+          </label>
+
           <button
             disabled={saving}
             onClick={saveTurno}
@@ -268,12 +326,12 @@ export const TurnoDefinitionEditor = ({
               padding: '0.75rem 1rem',
               borderRadius: '12px',
               border: 'none',
-              background: '#0f62fe',
+              background: editingId ? '#2563eb' : '#0f62fe',
               color: '#fff',
               cursor: 'pointer',
             }}
           >
-            Guardar turno
+            {editingId ? 'Actualizar turno' : 'Guardar turno'}
           </button>
         </div>
       </div>
@@ -285,9 +343,11 @@ export const TurnoDefinitionEditor = ({
               <th>Nombre</th>
               <th>Inicio</th>
               <th>Fin</th>
-              <th>Colación</th>
+              <th>Colacion</th>
+              <th>H. extra inicio</th>
+              <th>H. extra fin</th>
               <th>Orden</th>
-              <th>Acción</th>
+              <th>Accion</th>
             </tr>
           </thead>
           <tbody>
@@ -299,10 +359,18 @@ export const TurnoDefinitionEditor = ({
                 <td>
                   {turno.colacion_inicio
                     ? `${displayTime(turno.colacion_inicio)} - ${displayTime(turno.colacion_fin)}`
-                    : '—'}
+                    : '-'}
                 </td>
+                <td>{turno.horas_extra_inicio != null ? `${turno.horas_extra_inicio}h` : '-'}</td>
+                <td>{turno.horas_extra != null ? `${turno.horas_extra}h` : '-'}</td>
                 <td>{turno.orden}</td>
-                <td>
+                <td style={{ display: 'flex', gap: '0.4rem' }}>
+                  <button
+                    disabled={saving}
+                    onClick={() => editTurno(turno)}
+                  >
+                    Editar
+                  </button>
                   <button
                     disabled={saving}
                     onClick={() => deleteTurno(turno.id)}

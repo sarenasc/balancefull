@@ -4,6 +4,15 @@ export const addDays = (dateString, days) => {
   return date.toISOString().split('T')[0];
 };
 
+export const hoursToWholeDays = (hours) => {
+  const safe = Number(hours);
+  if (!Number.isFinite(safe) || safe <= 0) return 0;
+  return Math.ceil(safe / 24);
+};
+
+export const getCuradoReleaseDate = (dateString, hours) =>
+  addDays(dateString, hoursToWholeDays(hours));
+
 export const buildDateRange = (start, totalDays) =>
   Array.from({ length: totalDays }, (_, index) => addDays(start, index));
 

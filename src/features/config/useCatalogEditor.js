@@ -1,29 +1,13 @@
 import { useState } from 'react';
 import { appConfig } from '../../app/config';
+import { createApiClient } from '../../services/api';
 
-const apiUrl = appConfig.apiBaseUrl;
-
-const requestJson = async (path, options = {}) => {
-  const response = await fetch(`${apiUrl}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || 'Error de catálogo.');
-  }
-
-  return response.json().catch(() => ({}));
-};
+const api = createApiClient(appConfig.apiBaseUrl);
 
 export const useCatalogEditor = ({
-  familias,
+  familias: _familias,
   setFamilias,
-  especies,
+  especies: _especies,
   setEspecies,
 }) => {
   const [catalogError, setCatalogError] = useState(null);
@@ -36,13 +20,10 @@ export const useCatalogEditor = ({
     setCatalogSuccess(null);
 
     try {
-      const created = await requestJson('/familias', {
-        method: 'POST',
-        body: JSON.stringify({
-          nombre: payload.nombre,
-          usa_curado: payload.usa_curado ? 1 : 0,
-          orden: Number(payload.orden || 0),
-        }),
+      const created = await api.post('/familias', {
+        nombre: payload.nombre,
+        usa_curado: payload.usa_curado ? 1 : 0,
+        orden: Number(payload.orden || 0),
       });
 
       setFamilias((current) =>
@@ -67,13 +48,10 @@ export const useCatalogEditor = ({
     setCatalogSuccess(null);
 
     try {
-      await requestJson(`/familias/${familia.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          nombre: familia.nombre,
-          usa_curado: familia.usa_curado ? 1 : 0,
-          orden: Number(familia.orden || 0),
-        }),
+      await api.put(`/familias/${familia.id}`, {
+        nombre: familia.nombre,
+        usa_curado: familia.usa_curado ? 1 : 0,
+        orden: Number(familia.orden || 0),
       });
 
       setFamilias((current) =>
@@ -102,12 +80,9 @@ export const useCatalogEditor = ({
     setCatalogSuccess(null);
 
     try {
-      const created = await requestJson('/especies', {
-        method: 'POST',
-        body: JSON.stringify({
-          nombre: payload.nombre,
-          familia_id: Number(payload.familia_id),
-        }),
+      const created = await api.post('/especies', {
+        nombre: payload.nombre,
+        familia_id: Number(payload.familia_id),
       });
 
       setEspecies((current) => [...current, created]);
@@ -127,10 +102,7 @@ export const useCatalogEditor = ({
     setCatalogSuccess(null);
 
     try {
-      await requestJson(`/especies/${id}`, {
-        method: 'DELETE',
-      });
-
+      await api.delete(`/especies/${id}`);
       setEspecies((current) => current.filter((item) => Number(item.id) !== Number(id)));
       setCatalogSuccess('Especie eliminada correctamente.');
       return true;

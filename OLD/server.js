@@ -387,7 +387,7 @@ app.get("/api/feriados", async (req, res) => {
     const r = await p.request().query(
       "SELECT CONVERT(VARCHAR,fecha,23) AS fecha, nombre FROM feriados ORDER BY fecha"
     );
-    res.json(r.recordset.map(f => f.fecha));
+    res.json(r.recordset);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -402,6 +402,18 @@ app.post("/api/feriados", async (req, res) => {
         IF NOT EXISTS (SELECT 1 FROM feriados WHERE fecha=@fecha)
           INSERT INTO feriados (fecha, nombre) VALUES (@fecha, @nombre)
       `);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put("/api/feriados/:fecha", async (req, res) => {
+  const { nombre } = req.body;
+  try {
+    const p = await getPool();
+    await p.request()
+      .input("fecha",  sql.Date,     req.params.fecha)
+      .input("nombre", sql.NVarChar, nombre || "")
+      .query("UPDATE feriados SET nombre=@nombre WHERE fecha=@fecha");
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -613,7 +625,7 @@ app.delete("/api/turnos-restricciones/:id", async (req, res) => {
 });
 
 app.post("/api/turnos", async (req, res) => {
-  const { fecha, hora_inicio, exportadora_id, semana, anio } = req.body;
+  const { fecha, hora_inicio, exportadora_id, semana, anio, es_hora_extra } = req.body;
   try {
     const p = await getPool();
     await p.request()
@@ -622,18 +634,35 @@ app.post("/api/turnos", async (req, res) => {
       .input("exportadora_id", sql.Int,       exportadora_id)
       .input("semana",         sql.Int,       semana)
       .input("anio",           sql.Int,       anio)
+      .input("es_hora_extra",  sql.Bit,       es_hora_extra ? 1 : 0)
       .query(`
         MERGE INTO turnos AS tgt
-        USING (VALUES (@fecha,@hora_inicio,@exportadora_id,@semana,@anio))
-          AS src(fecha,hora_inicio,exportadora_id,semana,anio)
+        USING (VALUES (@fecha,@hora_inicio,@exportadora_id,@semana,@anio,@es_hora_extra))
+          AS src(fecha,hora_inicio,exportadora_id,semana,anio,es_hora_extra)
         ON tgt.fecha=src.fecha AND tgt.hora_inicio=src.hora_inicio
         WHEN MATCHED THEN
-          UPDATE SET exportadora_id=src.exportadora_id, semana=src.semana, anio=src.anio
+          UPDATE SET exportadora_id=src.exportadora_id, semana=src.semana, anio=src.anio, es_hora_extra=src.es_hora_extra
         WHEN NOT MATCHED THEN
-          INSERT (fecha,hora_inicio,exportadora_id,semana,anio)
-          VALUES (src.fecha,src.hora_inicio,src.exportadora_id,src.semana,src.anio);
+          INSERT (fecha,hora_inicio,exportadora_id,semana,anio,es_hora_extra)
+          VALUES (src.fecha,src.hora_inicio,src.exportadora_id,src.semana,src.anio,src.es_hora_extra);
       `);
     res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get("/api/horas-extra-dia", async (req, res) => {
+  try {
+    const p = await getPool();
+    const r = await p.request().query(`
+      SELECT
+        exportadora_id,
+        CONVERT(VARCHAR, fecha, 23) AS fecha,
+        CAST(COUNT(*) AS DECIMAL(10,1)) * 0.5 AS horas_extra
+      FROM turnos
+      WHERE es_hora_extra = 1
+      GROUP BY exportadora_id, fecha
+    `);
+    res.json(r.recordset);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1036,6 +1065,19 @@ app.post("/api/tipos-restriccion", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.put("/api/tipos-restriccion/:id", async (req, res) => {
+  const { nombre, color } = req.body;
+  try {
+    const p = await getPool();
+    await p.request()
+      .input("id",     sql.Int,      req.params.id)
+      .input("nombre", sql.NVarChar, nombre)
+      .input("color",  sql.NVarChar, color || '#dc2626')
+      .query("UPDATE tipos_restriccion SET nombre=@nombre, color=@color WHERE id=@id");
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.delete("/api/tipos-restriccion/:id", async (req, res) => {
   try {
     const p = await getPool();
@@ -1055,7 +1097,8 @@ app.get("/api/turnos-definicion", async (req, res) => {
         id, nombre,
         hora_inicio, hora_fin,
         colacion_inicio, colacion_fin,
-        orden, activa
+        orden, activa,
+        horas_extra, horas_extra_inicio
       FROM turnos_definicion
       WHERE activa=1
       ORDER BY orden, id
@@ -1065,7 +1108,7 @@ app.get("/api/turnos-definicion", async (req, res) => {
 });
 
 app.post("/api/turnos-definicion", async (req, res) => {
-  const { nombre, hora_inicio, hora_fin, colacion_inicio, colacion_fin, orden } = req.body;
+  const { nombre, hora_inicio, hora_fin, colacion_inicio, colacion_fin, orden, horas_extra, horas_extra_inicio } = req.body;
   try {
     const validarHora = (hora, campo) => {
       if (hora === null || hora === undefined) return null;
@@ -1081,6 +1124,9 @@ app.post("/api/turnos-definicion", async (req, res) => {
     const cf = validarHora(colacion_fin,    "colacion_fin");
 
     if (!hi || !hf) throw new Error("hora_inicio y hora_fin son obligatorias");
+
+    const he  = horas_extra        != null ? Number(horas_extra)        : null;
+    const hei = horas_extra_inicio != null ? Number(horas_extra_inicio) : null;
 
     const p = await getPool();
     const existing = await p.request()
@@ -1095,14 +1141,18 @@ app.post("/api/turnos-definicion", async (req, res) => {
         .input("ci", sql.VarChar(8), ci)
         .input("cf", sql.VarChar(8), cf)
         .input("orden", sql.Int, orden || 0)
+        .input("he",  sql.Decimal(4,1), he)
+        .input("hei", sql.Decimal(4,1), hei)
         .query(`
           UPDATE turnos_definicion
           SET activa=1,
-              hora_inicio      = CAST(@hi AS TIME),
-              hora_fin         = CAST(@hf AS TIME),
-              colacion_inicio  = CASE WHEN @ci IS NULL THEN NULL ELSE CAST(@ci AS TIME) END,
-              colacion_fin     = CASE WHEN @cf IS NULL THEN NULL ELSE CAST(@cf AS TIME) END,
-              orden            = @orden
+              hora_inicio        = CAST(@hi AS TIME),
+              hora_fin           = CAST(@hf AS TIME),
+              colacion_inicio    = CASE WHEN @ci IS NULL THEN NULL ELSE CAST(@ci AS TIME) END,
+              colacion_fin       = CASE WHEN @cf IS NULL THEN NULL ELSE CAST(@cf AS TIME) END,
+              orden              = @orden,
+              horas_extra        = @he,
+              horas_extra_inicio = @hei
           OUTPUT INSERTED.*
           WHERE nombre=@nombre
         `);
@@ -1115,9 +1165,11 @@ app.post("/api/turnos-definicion", async (req, res) => {
         .input("ci", sql.VarChar(8), ci)
         .input("cf", sql.VarChar(8), cf)
         .input("orden", sql.Int, orden || 0)
+        .input("he",  sql.Decimal(4,1), he)
+        .input("hei", sql.Decimal(4,1), hei)
         .query(`
           INSERT INTO turnos_definicion
-            (nombre, hora_inicio, hora_fin, colacion_inicio, colacion_fin, orden)
+            (nombre, hora_inicio, hora_fin, colacion_inicio, colacion_fin, orden, horas_extra, horas_extra_inicio)
           OUTPUT INSERTED.*
           VALUES (
             @nombre,
@@ -1125,7 +1177,9 @@ app.post("/api/turnos-definicion", async (req, res) => {
             CAST(@hf AS TIME),
             CASE WHEN @ci IS NULL THEN NULL ELSE CAST(@ci AS TIME) END,
             CASE WHEN @cf IS NULL THEN NULL ELSE CAST(@cf AS TIME) END,
-            @orden
+            @orden,
+            @he,
+            @hei
           )
         `);
       res.json(result.recordset[0]);
@@ -1137,7 +1191,7 @@ app.post("/api/turnos-definicion", async (req, res) => {
 });
 
 app.put("/api/turnos-definicion/:id", async (req, res) => {
-  const { nombre, hora_inicio, hora_fin, colacion_inicio, colacion_fin, orden } = req.body;
+  const { nombre, hora_inicio, hora_fin, colacion_inicio, colacion_fin, orden, horas_extra, horas_extra_inicio } = req.body;
   try {
     const validarHora = (hora, campo) => {
       if (hora === null || hora === undefined) return null;
@@ -1154,6 +1208,9 @@ app.put("/api/turnos-definicion/:id", async (req, res) => {
 
     if (!hi || !hf) throw new Error("hora_inicio y hora_fin son obligatorias");
 
+    const he  = horas_extra        != null ? Number(horas_extra)        : null;
+    const hei = horas_extra_inicio != null ? Number(horas_extra_inicio) : null;
+
     const p = await getPool();
     await p.request()
       .input("id",     sql.Int,      req.params.id)
@@ -1163,14 +1220,18 @@ app.put("/api/turnos-definicion/:id", async (req, res) => {
       .input("ci",     sql.VarChar(8), ci)
       .input("cf",     sql.VarChar(8), cf)
       .input("orden",  sql.Int,      orden)
+      .input("he",     sql.Decimal(4,1), he)
+      .input("hei",    sql.Decimal(4,1), hei)
       .query(`
         UPDATE turnos_definicion SET
-          nombre          = @nombre,
-          hora_inicio     = CAST(@hi AS TIME),
-          hora_fin        = CAST(@hf AS TIME),
-          colacion_inicio = CASE WHEN @ci IS NULL THEN NULL ELSE CAST(@ci AS TIME) END,
-          colacion_fin    = CASE WHEN @cf IS NULL THEN NULL ELSE CAST(@cf AS TIME) END,
-          orden           = @orden
+          nombre             = @nombre,
+          hora_inicio        = CAST(@hi AS TIME),
+          hora_fin           = CAST(@hf AS TIME),
+          colacion_inicio    = CASE WHEN @ci IS NULL THEN NULL ELSE CAST(@ci AS TIME) END,
+          colacion_fin       = CASE WHEN @cf IS NULL THEN NULL ELSE CAST(@cf AS TIME) END,
+          orden              = @orden,
+          horas_extra        = @he,
+          horas_extra_inicio = @hei
         WHERE id=@id
       `);
     res.json({ ok: true });

@@ -1,9 +1,16 @@
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+
 const formatNumber = (value, digits = 0) => {
   const safe = Number(value || 0);
   return safe.toLocaleString('es-CL', {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });
+};
+
+const formatCellValue = (value, digits = 0) => {
+  const safe = Number(value || 0);
+  return safe === 0 ? '–' : formatNumber(safe, digits);
 };
 
 const formatDateLabel = (value) =>
@@ -13,264 +20,990 @@ const formatDateLabel = (value) =>
     month: '2-digit',
   });
 
-const sectionTitleStyle = {
-  background: '#0f62fe',
-  color: '#fff',
-  fontWeight: 800,
-  letterSpacing: '0.04em',
+const formatWeekLabel = (value) => {
+  const date = new Date(`${value}T12:00:00`);
+  const day = date.getDay() || 7;
+  date.setDate(date.getDate() + 4 - day);
+  const yearStart = new Date(date.getFullYear(), 0, 1);
+  const week = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+  return `Sem ${week}`;
 };
 
-const subHeaderStyle = {
-  background: '#f8fafc',
-  color: '#334155',
-  fontWeight: 700,
-};
-
-const balanceValueStyle = (value) => {
-  if (value < 0) {
-    return {
-      color: '#dc2626',
-      fontWeight: 800,
-      background: '#fef2f2',
-    };
-  }
+const getWeekRangeForDate = (value) => {
+  const date = new Date(`${value}T12:00:00`);
+  const day = date.getDay() || 7;
+  const start = new Date(date);
+  start.setDate(date.getDate() - day + 1);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
 
   return {
-    color: '#0f172a',
-    fontWeight: 700,
-    background: '#f8fafc',
+    start: start.toISOString().slice(0, 10),
+    end: end.toISOString().slice(0, 10),
   };
 };
 
-const renderRows = (rows, dates, options = {}) => {
-  const { showAutoHint = false } = options;
+const formatShortDisplayDate = (value) =>
+  new Date(`${value}T12:00:00`).toLocaleDateString('es-CL', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'numeric',
+  });
 
-  return rows.map((row) => (
-    <tr key={`${row.field}_${row.entityId}`}>
-      <td style={{ border: '1px solid #dbe4f0', padding: '0.45rem', background: '#fff' }}>
+const normalizeHoliday = (holiday) => {
+  if (!holiday) return null;
+  if (typeof holiday === 'string') return holiday.slice(0, 10);
+  if (typeof holiday === 'object') {
+    return String(holiday.fecha || holiday.date || holiday.dia || '').slice(0, 10) || null;
+  }
+  return null;
+};
+
+const isSunday = (value) => new Date(`${value}T12:00:00`).getDay() === 0;
+const isToday = (value) => value === new Date().toISOString().slice(0, 10);
+
+const palette = {
+  shell: '#0b1422',
+  shellBorder: '#22324a',
+  leftHeader: '#111c2b',
+  leftCell: '#0f1825',
+  leftCellAlt: '#132033',
+  section: '#0a1320',
+  total: '#101a29',
+  totalStrong: '#07111e',
+  totalHighlight: '#1b1329',
+  dayCell: '#e9eef5',
+  dayCellAlt: '#e3eaf4',
+  dayBorder: '#c9d3e1',
+  weekend: '#f7d8d8',
+  today: '#c9ddfb',
+  currentWeek: '#dae7fb',
+  blocked: '#0d1524',
+  negative: '#ffd3d3',
+  positiveText: '#0f172a',
+};
+
+const leftCellBaseStyle = {
+  border: `1px solid ${palette.shellBorder}`,
+  padding: '0.5rem 0.65rem',
+  background: palette.leftCell,
+  color: '#f8fafc',
+  whiteSpace: 'nowrap',
+};
+
+const stickyColumnStyle = (left, width, background = palette.leftCell) => ({
+  position: 'sticky',
+  left,
+  zIndex: 4,
+  width,
+  minWidth: width,
+  maxWidth: width,
+  background,
+  boxShadow: '1px 0 0 rgba(34,50,74,0.95)',
+});
+
+const getDateCellMeta = ({ date, holidaySet, currentWeekLabel }) => {
+  const sunday = isSunday(date);
+  const today = isToday(date);
+  const holiday = holidaySet.has(date);
+  const weekLabel = formatWeekLabel(date);
+  const currentWeek = currentWeekLabel === weekLabel;
+
+  let background = palette.dayCell;
+  let color = '#1e293b';
+  let borderColor = palette.dayBorder;
+
+  if (currentWeek) {
+    background = palette.currentWeek;
+  }
+
+  if (sunday || holiday) {
+    background = palette.weekend;
+    color = '#991b1b';
+    borderColor = '#efb0b0';
+  }
+
+  if (today) {
+    background = palette.today;
+    color = '#1d4ed8';
+    borderColor = '#8cb6f7';
+  }
+
+  return {
+    sunday,
+    today,
+    holiday,
+    currentWeek,
+    weekLabel,
+    background,
+    color,
+    borderColor,
+  };
+};
+
+const getBodyCellStyle = (meta, { blocked = false, negative = false, total = false } = {}) => {
+  let background = meta.background;
+  let color = '#0f172a';
+  
+  if (total) {
+    background = meta.currentWeek ? '#cfe0fa' : '#d7e4f7';
+    color = '#0369a1';
+  }
+
+  if (blocked) {
+    background = palette.blocked;
+    color = '#93c5fd';
+  }
+
+  if (negative) {
+    background = palette.negative;
+    color = '#dc2626';
+    
+  }
+
+  return {
+    border: `1px solid ${meta.borderColor}`,
+    padding: '0.48rem',
+    textAlign: 'center',
+    background,
+    color,
+    fontWeight: negative ? 800 : total ? 700 : 500,
+    minWidth: '78px',
+    
+  };
+};
+
+const renderLeftInfoCells = (row, variant = 'normal') => {
+  const alt = variant === 'alt';
+  const background = alt ? palette.leftCellAlt : palette.leftCell;
+
+  return (
+    <>
+      <td style={{ ...leftCellBaseStyle, ...stickyColumnStyle(0, 190, background), zIndex: 3 }}>
         {row.planta}
       </td>
-      <td style={{ border: '1px solid #dbe4f0', padding: '0.45rem', background: '#fff' }}>
+      <td style={{ ...leftCellBaseStyle, ...stickyColumnStyle(190, 190, background), zIndex: 3 }}>
         {row.exportadora}
       </td>
-      <td style={{ border: '1px solid #dbe4f0', padding: '0.45rem', background: '#fff' }}>
+      <td style={{ ...leftCellBaseStyle, ...stickyColumnStyle(380, 150, background), zIndex: 3 }}>
         {row.especie}
       </td>
-      <td style={{ border: '1px solid #dbe4f0', padding: '0.45rem', background: '#fff' }}>
-        {row.variedad}
-      </td>
+    </>
+  );
+};
+
+const renderRows = (rows, dates, holidaySet, currentWeekLabel, options = {}) => {
+  const {
+    showAutoHint = false,
+    editable = false,
+    family = null,
+    entityMap = new Map(),
+    setDraftCell,
+    updateCell,
+    savingCell,
+  } = options;
+
+  return rows.map((row, rowIndex) => (
+    <tr key={`${row.field}_${row.entityId}`}>
+      {renderLeftInfoCells(row, rowIndex % 2 === 0 ? 'normal' : 'alt')}
 
       {dates.map((date) => {
         const value = Number(row.values?.[date] || 0);
         const autoValue = Number(row.autoValues?.[date] || 0);
+        const meta = getDateCellMeta({ date, holidaySet, currentWeekLabel });
+        const key = `${row.field}_${row.entityId}_${date}`;
+        const entity = entityMap.get(Number(row.entityId));
+
+
+        const binsPerHour = row.binsPerHourValues?.[date];
+        const isOverride = row.isOverrideValues?.[date];
 
         return (
-          <td
-            key={`${row.field}_${row.entityId}_${date}`}
-            style={{
-              border: '1px solid #dbe4f0',
-              padding: '0.45rem',
-              textAlign: 'right',
-              background: '#fff',
-            }}
-          >
-            <div>{formatNumber(value)}</div>
-            {showAutoHint && autoValue > 0 ? (
-              <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
-                auto: {formatNumber(autoValue)}
-              </div>
-            ) : null}
+          <td key={key} style={getBodyCellStyle(meta)}>
+            {editable && entity ? (
+              <>
+                <input
+                  className={`balance-input ${value < 0 ? 'blink-negative' : ''}`}
+                  type="number"
+                  min="0"
+                  value={value}
+                  onChange={(event) =>
+                    setDraftCell?.({
+                      entityId: row.entityId,
+                      date,
+                      field: row.field,
+                      rawValue: event.target.value,
+                    })
+                  }
+                  onBlur={(event) =>
+                    updateCell?.({
+                      entity,
+                      date,
+                      field: row.field,
+                      value: event.target.value,
+                      useCurado: Boolean(family?.usaCurado),
+                    })
+                  }
+                  style={{
+                    width: '100%',
+                    minWidth: '64px',
+                    padding: '0.35rem 0.2rem',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: savingCell === key ? 'rgba(59,130,246,0.14)' : 'transparent',
+                    textAlign: 'center',
+                    color: palette.positiveText,
+                    fontWeight: 700,
+                  }}
+                />
+                {showAutoHint && autoValue > 0 ? (
+                  <div style={{ fontSize: '0.68rem', color: '#7c3aed', marginTop: '0.15rem' }}>
+                    auto {formatNumber(autoValue)}
+                  </div>
+                ) : null}
+                {binsPerHour != null ? (
+                  <div style={{ fontSize: '0.66rem', marginTop: '0.15rem', color: isOverride ? '#d97706' : '#94a3b8', fontWeight: isOverride ? 700 : 400 }}>
+                    {isOverride ? '★ ' : ''}{formatNumber(binsPerHour, 1)} b/h
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <div className={value < 0 ? 'blink-negative':''}>
+                  {formatCellValue(value)}
+                </div>
+                {showAutoHint && autoValue > 0 ? (
+                  <div style={{ fontSize: '0.68rem', color: '#7c3aed', marginTop: '0.15rem' }}>
+                    auto {formatNumber(autoValue)}
+                  </div>
+                ) : null}
+                {binsPerHour != null ? (
+                  <div style={{ fontSize: '0.66rem', marginTop: '0.15rem', color: isOverride ? '#d97706' : '#94a3b8', fontWeight: isOverride ? 700 : 400 }}>
+                    {isOverride ? '★ ' : ''}{formatNumber(binsPerHour, 1)} b/h
+                  </div>
+                ) : null}
+              </>
+            )}
           </td>
         );
       })}
+      <td
+        style={{
+          position: 'sticky',
+          right: 0,
+          zIndex: 3,
+          background: rowIndex % 2 === 0 ? palette.leftCell : palette.leftCellAlt,
+          border: `1px solid ${palette.shellBorder}`,
+          boxShadow: '-1px 0 0 rgba(34,50,74,0.95)',
+          padding: '0.48rem 0.6rem',
+          textAlign: 'center',
+          color: '#fbbf24',
+          fontWeight: 700,
+          minWidth: '90px',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {formatNumber(dates.reduce((sum, date) => sum + Number(row.values?.[date] || 0), 0))}
+      </td>
     </tr>
   ));
 };
 
-const renderTotalRow = ({ label, dates, values, digits = 0, highlight = false }) => (
+const renderTotalRow = ({
+  label,
+  dates,
+  values,
+  holidaySet,
+  currentWeekLabel,
+  digits = 0,
+  leftLabelColor = '#38bdf8',
+  valueColor = '#38bdf8',
+  showZerosAsDash = true,
+}) => (
   <tr>
     <td
-      colSpan={4}
+      colSpan={3}
       style={{
-        border: '1px solid #dbe4f0',
-        padding: '0.5rem',
+        ...leftCellBaseStyle,
+        ...stickyColumnStyle(0, 530, palette.totalStrong),
+        zIndex: 2,
         fontWeight: 800,
-        background: highlight ? '#fef9c3' : '#eff6ff',
+        color: leftLabelColor,
+        letterSpacing: '0.05em',
+        textTransform: 'uppercase',
       }}
     >
       {label}
     </td>
-
     {dates.map((date) => {
+      const meta = getDateCellMeta({ date, holidaySet, currentWeekLabel });
       const value = Number(values?.[date] || 0);
       return (
         <td
           key={`${label}_${date}`}
           style={{
-            border: '1px solid #dbe4f0',
-            padding: '0.5rem',
-            textAlign: 'right',
+            ...getBodyCellStyle(meta, { total: true }),
+            color: valueColor,
             fontWeight: 800,
-            background: highlight ? '#fef9c3' : '#eff6ff',
           }}
         >
-          {formatNumber(value, digits)}
+          {showZerosAsDash ? formatCellValue(value, digits) : formatNumber(value, digits)}
         </td>
       );
     })}
+    <td
+      style={{
+        position: 'sticky',
+        right: 0,
+        zIndex: 3,
+        background: palette.totalStrong,
+        border: `1px solid ${palette.shellBorder}`,
+        boxShadow: '-1px 0 0 rgba(34,50,74,0.95)',
+        padding: '0.48rem 0.6rem',
+        textAlign: 'center',
+        color: valueColor,
+        fontWeight: 800,
+        minWidth: '90px',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {formatNumber(dates.reduce((sum, date) => sum + Number(values?.[date] || 0), 0), digits)}
+    </td>
   </tr>
 );
 
-export const BalanceFamilyTable = ({ family }) => {
+const renderSectionRow = (label, dates) => (
+  <tr>
+    <td
+      colSpan={3}
+      style={{
+        ...leftCellBaseStyle,
+        ...stickyColumnStyle(0, 530, palette.section),
+        zIndex: 2,
+        color: '#f8fafc',
+        fontWeight: 800,
+        letterSpacing: '0.06em',
+        textTransform: 'uppercase',
+      }}
+    >
+      {label}
+    </td>
+    {dates.map((date) => (
+      <td
+        key={`section_${label}_${date}`}
+        style={{
+          border: `1px solid ${palette.shellBorder}`,
+          background: palette.section,
+          height: '28px',
+        }}
+      />
+    ))}
+    <td
+      style={{
+        position: 'sticky',
+        right: 0,
+        zIndex: 3,
+        background: palette.section,
+        border: `1px solid ${palette.shellBorder}`,
+        height: '28px',
+        minWidth: '90px',
+      }}
+    />
+  </tr>
+);
+
+export const BalanceFamilyTable = ({
+  family,
+  holidays = [],
+  entityMap = new Map(),
+  setDraftCell,
+  updateCell,
+  savingCell,
+  onOpenFullscreen,
+  isFullscreen = false,
+}) => {
+  const {
+    familyName = '',
+    usaCurado = false,
+    seasonStart = null,
+    seasonEnd = null,
+    dates = [],
+    sections = { balance: [], cosecha: [], curado: [], proceso: [] },
+    totals = {},
+  } = family || {};
+  const holidaySet = new Set(holidays.map(normalizeHoliday).filter(Boolean));
+  const currentWeekLabel = formatWeekLabel(new Date().toISOString().slice(0, 10));
+  const [hoveredSunday, setHoveredSunday] = useState(null);
+  const [fitScale, setFitScale] = useState(1);
+  const [bottomTrackWidth, setBottomTrackWidth] = useState(0);
+  const viewportRef = useRef(null);
+  const contentRef = useRef(null);
+  const tableRef = useRef(null);
+  const bottomScrollRef = useRef(null);
+  const todayColRef = useRef(null);
+
+  const weeklySummary = useMemo(() => {
+    if (!hoveredSunday) return null;
+
+    const { start, end } = getWeekRangeForDate(hoveredSunday);
+    const weekDates = dates.filter((date) => date >= start && date <= end);
+    if (!weekDates.length) return null;
+
+    const rows = sections.balance.map((balanceRow) => {
+      const entityId = balanceRow.entityId;
+      const exportadora = balanceRow.exportadora;
+      const cosechaRow = sections.cosecha.find((row) => row.entityId === entityId);
+      const curadoRow = sections.curado.find((row) => row.entityId === entityId);
+      const procesoRow = sections.proceso.find((row) => row.entityId === entityId);
+
+      const openingBalanceDate = dates.filter((date) => date < start).slice(-1)[0];
+      const openingBalance = Number(
+        openingBalanceDate ? balanceRow.values?.[openingBalanceDate] || 0 : 0,
+      );
+      const cosechaWeek = weekDates.reduce(
+        (sum, date) => sum + Number(cosechaRow?.values?.[date] || 0),
+        0,
+      );
+      const curadoWeek = weekDates.reduce(
+        (sum, date) => sum + Number(curadoRow?.values?.[date] || 0),
+        0,
+      );
+      const procesoWeek = weekDates.reduce(
+        (sum, date) => sum + Number(procesoRow?.values?.[date] || 0),
+        0,
+      );
+      const ingresoWeek = usaCurado ? curadoWeek : cosechaWeek;
+      const totalDisponible = openingBalance + ingresoWeek - procesoWeek;
+      const baseDisponible = openingBalance + ingresoWeek;
+      const usagePercent = procesoWeek > 0 ? (  procesoWeek / baseDisponible) * 100 : 0;
+
+      return {
+        exportadora,
+        openingBalance,
+        cosechaWeek,
+        curadoWeek,
+        procesoWeek,
+        usagePercent,
+        totalDisponible,
+      };
+    });
+
+    const totalsRow = rows.reduce(
+      (acc, row) => ({
+        openingBalance: acc.openingBalance + row.openingBalance,
+        cosechaWeek: acc.cosechaWeek + row.cosechaWeek,
+        curadoWeek: acc.curadoWeek + row.curadoWeek,
+        procesoWeek: acc.procesoWeek + row.procesoWeek,
+        totalDisponible: acc.totalDisponible + row.totalDisponible,
+      }),
+      { openingBalance: 0, cosechaWeek: 0, curadoWeek: 0, procesoWeek: 0, totalDisponible: 0 },
+    );
+
+    const weeklyTurnoHours = weekDates.reduce(
+      (sum, date) => sum + Number(totals.totalHorasProceso?.[date] || 0),
+      0,
+    );
+    const usagePercent = (weeklyTurnoHours / (24 * 6)) * 100;
+
+    return {
+      title: `Balance ${formatWeekLabel(hoveredSunday)} — ${formatShortDisplayDate(hoveredSunday)}`,
+      rows,
+      totalsRow,
+      usagePercent,
+    };
+  }, [dates, hoveredSunday, sections.balance, sections.cosecha, sections.curado, sections.proceso, totals, usaCurado]);
+
+  useLayoutEffect(() => {
+  if (!isFullscreen) {
+    setFitScale(1);
+    return;
+  }
+
+  const updateScale = () => {
+    const viewport = viewportRef.current;
+    const content = contentRef.current;
+    if (!viewport || !content) return;
+
+    const availableHeight = viewport.clientHeight - 12;
+    const realHeight = content.scrollHeight;
+    if (!availableHeight || !realHeight) return;
+
+    const nextScale = Math.min(1, availableHeight / realHeight);
+    setFitScale(nextScale > 0 ? nextScale : 1);
+  };
+
+  updateScale();
+  window.addEventListener('resize', updateScale);
+  return () => window.removeEventListener('resize', updateScale);
+}, [isFullscreen, dates.length]);
+
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    const bottom = bottomScrollRef.current;
+    if (!viewport || !bottom || !isFullscreen) return;
+
+    let syncing = false;
+
+    const syncFromViewport = () => {
+      if (syncing) return;
+      syncing = true;
+      bottom.scrollLeft = viewport.scrollLeft;
+      syncing = false;
+    };
+
+    const syncFromBottom = () => {
+      if (syncing) return;
+      syncing = true;
+      viewport.scrollLeft = bottom.scrollLeft;
+      syncing = false;
+    };
+
+    viewport.addEventListener('scroll', syncFromViewport);
+    bottom.addEventListener('scroll', syncFromBottom);
+
+    return () => {
+      viewport.removeEventListener('scroll', syncFromViewport);
+      bottom.removeEventListener('scroll', syncFromBottom);
+    };
+  }, [isFullscreen, fitScale, dates.length]);
+
+  useLayoutEffect(() => {
+    if (!isFullscreen) {
+      setBottomTrackWidth(0);
+      return;
+    }
+
+    const updateBottomTrack = () => {
+      const viewport = viewportRef.current;
+      const table = tableRef.current;
+      if (!viewport || !table) return;
+      setBottomTrackWidth(Math.max(viewport.scrollWidth, table.scrollWidth, 1));
+    };
+
+    updateBottomTrack();
+    window.addEventListener('resize', updateBottomTrack);
+    return () => window.removeEventListener('resize', updateBottomTrack);
+  }, [isFullscreen, fitScale, dates.length, sections]);
+
+  // Scroll to current week on first render once dates are available
+  useLayoutEffect(() => {
+    if (!dates.length || !viewportRef.current || !todayColRef.current) return;
+    const viewport = viewportRef.current;
+    const th = todayColRef.current;
+    const left = th.offsetLeft - viewport.clientWidth / 2 + th.offsetWidth / 2;
+    viewport.scrollLeft = Math.max(0, left);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dates.length > 0]);
+
   if (!family) return null;
 
-  const { familyName, usaCurado, seasonStart, seasonEnd, dates, sections, totals } = family;
-
   return (
-    <section className="panel">
-      <div className="panel-heading">
-        <div>
-          <p className="eyebrow">Balance</p>
-          <h2>{familyName}</h2>
-          <div style={{ color: '#64748b', marginTop: '0.35rem', fontSize: '0.9rem' }}>
-            Temporada: {seasonStart || '—'} → {seasonEnd || '—'} ·{' '}
-            {usaCurado ? 'usa curado' : 'sin curado'}
+    <section
+      className="panel"
+      style={{
+        padding: '1rem',
+        borderRadius: '18px',
+        background: '#f8fafc',
+        height: isFullscreen ? '100%' : 'auto',
+        marginBottom: isFullscreen ? 0 : '1rem',
+      }}
+    >
+      {!isFullscreen ? (
+        <div
+          style={{
+            marginBottom: '0.85rem',
+            padding: '0.8rem 1rem',
+            borderRadius: '14px',
+            border: '1px solid #d6deeb',
+            background: '#fdfefe',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '0.78rem', letterSpacing: '0.18em', color: '#2563eb', textTransform: 'uppercase' }}>
+                Carga rápida en línea
+              </div>
+              <div style={{ marginTop: '0.5rem', color: '#475569', fontSize: '0.92rem' }}>
+                Ventana visible de la familia activa: <strong>{seasonStart || '—'}</strong> a{' '}
+                <strong>{seasonEnd || '—'}</strong>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onOpenFullscreen?.()}
+              style={{
+                border: '1px solid #cbd5e1',
+                background: '#fff',
+                color: '#0f172a',
+                borderRadius: '10px',
+                padding: '0.65rem 0.9rem',
+                cursor: 'pointer',
+                fontWeight: 700,
+              }}
+            >
+              Ver pantalla completa
+            </button>
           </div>
         </div>
-      </div>
+      ) : null}
 
-      <div className="table-wrap" style={{ overflowX: 'auto' }}>
-        <table style={{ minWidth: '1400px', borderCollapse: 'collapse', width: '100%' }}>
-          <thead>
-            <tr>
-              <th style={{ border: '1px solid #dbe4f0', padding: '0.55rem', ...subHeaderStyle }}>
-                Planta
-              </th>
-              <th style={{ border: '1px solid #dbe4f0', padding: '0.55rem', ...subHeaderStyle }}>
-                Exportadora
-              </th>
-              <th style={{ border: '1px solid #dbe4f0', padding: '0.55rem', ...subHeaderStyle }}>
-                Especie
-              </th>
-              <th style={{ border: '1px solid #dbe4f0', padding: '0.55rem', ...subHeaderStyle }}>
-                Variedad
-              </th>
-
-              {dates.map((date) => (
+      <div
+        ref={viewportRef}
+        className="table-wrap balance-grid-shell"
+        style={{
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          borderRadius: '16px',
+          border: `1px solid ${palette.shellBorder}`,
+          background: palette.shell,
+          height: isFullscreen ? 'calc(100vh - 5.5rem)' : 'auto',
+          position: 'relative',
+        }}
+      >
+        <div
+          ref={contentRef}
+          style={{
+            zoom: isFullscreen ? fitScale : 1,
+            width: isFullscreen && fitScale < 1 ? `${100 / fitScale}%` : '100%',
+          }}
+        >
+          <table
+            ref={tableRef}
+            style={{
+              minWidth: `${530 + dates.length * 78}px`,
+              borderCollapse: 'separate',
+              borderSpacing: 0,
+              width: '100%',
+              fontSize: '0.9rem',
+            }}
+          >
+            <thead>
+              <tr>
                 <th
-                  key={date}
+                  colSpan={3}
                   style={{
-                    border: '1px solid #dbe4f0',
-                    padding: '0.55rem',
-                    minWidth: '105px',
-                    ...subHeaderStyle,
+                    ...leftCellBaseStyle,
+                    ...stickyColumnStyle(0, 530, palette.leftHeader),
+                    zIndex: 6,
+                    color: '#94a3b8',
+                    textTransform: 'none',
+                    letterSpacing: '0.04em',
                   }}
                 >
-                  <div style={{ textTransform: 'capitalize' }}>{formatDateLabel(date)}</div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.2rem' }}>
-                    {date}
-                  </div>
+                  Familia activa: <span style={{ color: '#f8fafc' }}>{familyName}</span>
                 </th>
-              ))}
-            </tr>
-          </thead>
-
-          <tbody>
-            <tr>
-              <td
-                colSpan={4 + dates.length}
-                style={{ border: '1px solid #dbe4f0', padding: '0.65rem', ...sectionTitleStyle }}
-              >
-                Cosechas
-              </td>
-            </tr>
-            {renderRows(sections.cosecha, dates)}
-
-            <tr>
-              <td
-                colSpan={4 + dates.length}
-                style={{ border: '1px solid #dbe4f0', padding: '0.65rem', ...sectionTitleStyle }}
-              >
-                {usaCurado ? 'Curado / Liberación' : 'Curado (no aplica, editable si se requiere)'}
-              </td>
-            </tr>
-            {renderRows(sections.curado, dates, { showAutoHint: usaCurado })}
-
-            <tr>
-              <td
-                colSpan={4 + dates.length}
-                style={{ border: '1px solid #dbe4f0', padding: '0.65rem', ...sectionTitleStyle }}
-              >
-                Procesos
-              </td>
-            </tr>
-            {renderRows(sections.proceso, dates)}
-
-            {renderTotalRow({
-              label: 'TOTAL PROCESOS',
-              dates,
-              values: totals.totalProceso,
-            })}
-
-            {renderTotalRow({
-              label: 'TOTAL HORAS PROCESO',
-              dates,
-              values: totals.totalHorasProceso,
-              digits: 1,
-              highlight: true,
-            })}
-
-            <tr>
-              <td
-                colSpan={4 + dates.length}
-                style={{ border: '1px solid #dbe4f0', padding: '0.65rem', ...sectionTitleStyle }}
-              >
-                Balance
-              </td>
-            </tr>
-
-            {sections.balance.map((row) => (
-              <tr key={`balance_${row.entityId}`}>
-                <td style={{ border: '1px solid #dbe4f0', padding: '0.45rem', background: '#fff' }}>
-                  {row.planta}
-                </td>
-                <td style={{ border: '1px solid #dbe4f0', padding: '0.45rem', background: '#fff' }}>
-                  {row.exportadora}
-                </td>
-                <td style={{ border: '1px solid #dbe4f0', padding: '0.45rem', background: '#fff' }}>
-                  {row.especie}
-                </td>
-                <td style={{ border: '1px solid #dbe4f0', padding: '0.45rem', background: '#fff' }}>
-                  {row.variedad}
-                </td>
-
                 {dates.map((date) => {
-                  const value = Number(row.values?.[date] || 0);
+                  const meta = getDateCellMeta({ date, holidaySet, currentWeekLabel });
                   return (
-                    <td
-                      key={`balance_${row.entityId}_${date}`}
+                    <th
+                      key={`week_${date}`}
                       style={{
-                        border: '1px solid #dbe4f0',
-                        padding: '0.45rem',
-                        textAlign: 'right',
-                        ...balanceValueStyle(value),
+                        border: `1px solid ${meta.borderColor}`,
+                        background: meta.background,
+                        color: meta.color,
+                        minWidth: '78px',
+                        padding: '0.35rem 0.25rem',
+                        textAlign: 'center',
                       }}
                     >
-                      {formatNumber(value)}
-                    </td>
+                      <div style={{ fontSize: '0.7rem', textTransform: 'uppercase' }}>
+                        {meta.weekLabel}
+                      </div>
+                    </th>
                   );
                 })}
+                <th
+                  style={{
+                    ...leftCellBaseStyle,
+                    position: 'sticky',
+                    right: 0,
+                    zIndex: 6,
+                    background: palette.leftHeader,
+                    boxShadow: '-1px 0 0 rgba(34,50,74,0.95)',
+                    minWidth: '90px',
+                    textAlign: 'center',
+                  }}
+                />
               </tr>
-            ))}
+              <tr>
+                <th style={{ ...leftCellBaseStyle, ...stickyColumnStyle(0, 190, palette.leftHeader), zIndex: 6, color: '#94a3b8' }}>
+                  Planta
+                </th>
+                <th style={{ ...leftCellBaseStyle, ...stickyColumnStyle(190, 190, palette.leftHeader), zIndex: 6, color: '#38bdf8', textAlign: 'center' }}>
+                  Exportadora
+                </th>
+                <th style={{ ...leftCellBaseStyle, ...stickyColumnStyle(380, 150, palette.leftHeader), zIndex: 6, color: '#a78bfa', textAlign: 'center' }}>
+                  Especie
+                </th>
 
-            {renderTotalRow({
-              label: 'TOTAL BALANCE FAMILIA',
-              dates,
-              values: totals.totalBalance,
-            })}
-          </tbody>
-        </table>
+                {dates.map((date, dateIdx) => {
+                  const meta = getDateCellMeta({ date, holidaySet, currentWeekLabel });
+                  const isFirstCurrentWeek = meta.currentWeek && (dateIdx === 0 || !getDateCellMeta({ date: dates[dateIdx - 1], holidaySet, currentWeekLabel }).currentWeek);
+                  return (
+                    <th
+                      key={date}
+                      ref={isFirstCurrentWeek ? todayColRef : null}
+                      onMouseEnter={() => {
+                        if (meta.sunday) setHoveredSunday(date);
+                      }}
+                      onMouseLeave={() => {
+                        if (meta.sunday) setHoveredSunday(null);
+                      }}
+                      style={{
+                        border: `1px solid ${meta.borderColor}`,
+                        padding: '0.45rem 0.2rem',
+                        background: meta.background,
+                        color: meta.color,
+                        minWidth: '78px',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <div style={{ textTransform: 'capitalize', fontSize: '0.88rem' }}>
+                        {formatDateLabel(date)}
+                      </div>
+                      <div style={{ fontSize: '0.67rem', marginTop: '0.1rem' }}>
+                        {meta.today ? 'Hoy' : meta.holiday ? 'Feriado' : meta.sunday ? 'Dom' : ''}
+                      </div>
+                    </th>
+                  );
+                })}
+                <th
+                  style={{
+                    ...leftCellBaseStyle,
+                    position: 'sticky',
+                    right: 0,
+                    zIndex: 6,
+                    background: palette.leftHeader,
+                    boxShadow: '-1px 0 0 rgba(34,50,74,0.95)',
+                    color: '#fbbf24',
+                    minWidth: '90px',
+                    textAlign: 'center',
+                    fontWeight: 800,
+                  }}
+                >
+                  Total Temp.
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {renderSectionRow('Cosecha', dates)}
+              {renderRows(sections.cosecha, dates, holidaySet, currentWeekLabel, {
+                editable: true,
+                family,
+                entityMap,
+                setDraftCell,
+                updateCell,
+                savingCell,
+              })}
+              {renderTotalRow({
+                label: 'Total Cosecha',
+                dates,
+                values: sections.cosecha.reduce((acc, row) => {
+                  dates.forEach((date) => {
+                    acc[date] = Number(acc[date] || 0) + Number(row.values?.[date] || 0);
+                  });
+                  return acc;
+                }, {}),
+                holidaySet,
+                currentWeekLabel,
+                leftLabelColor: '#38bdf8',
+                valueColor: '#0ea5e9',
+              })}
+
+              {renderSectionRow(usaCurado ? 'Liberación Curado' : 'Curado', dates)}
+              {renderRows(sections.curado, dates, holidaySet, currentWeekLabel, {
+                showAutoHint: usaCurado,
+                editable: true,
+                family,
+                entityMap,
+                setDraftCell,
+                updateCell,
+                savingCell,
+              })}
+              {renderTotalRow({
+                label: 'Total Curado',
+                dates,
+                values: sections.curado.reduce((acc, row) => {
+                  dates.forEach((date) => {
+                    acc[date] = Number(acc[date] || 0) + Number(row.values?.[date] || 0);
+                  });
+                  return acc;
+                }, {}),
+                holidaySet,
+                currentWeekLabel,
+                leftLabelColor: '#a78bfa',
+                valueColor: '#8b5cf6',
+              })}
+
+              {renderSectionRow('Proceso', dates)}
+              {renderRows(sections.proceso, dates, holidaySet, currentWeekLabel, {
+                editable: true,
+                family,
+                entityMap,
+                setDraftCell,
+                updateCell,
+                savingCell,
+              })}
+              {renderTotalRow({
+                label: 'Total Proceso',
+                dates,
+                values: totals.totalProceso,
+                holidaySet,
+                currentWeekLabel,
+                leftLabelColor: '#22c55e',
+                valueColor: '#10b981',
+              })}
+              {renderTotalRow({
+                label: 'Total Horas Proceso',
+                dates,
+                values: totals.totalHorasProceso,
+                holidaySet,
+                currentWeekLabel,
+                digits: 1,
+                leftLabelColor: '#f97316',
+                valueColor: '#f97316',
+              })}
+
+              {renderSectionRow('Balance', dates)}
+              {sections.balance.map((row, rowIndex) => (
+                <tr key={`balance_${row.entityId}`}>
+                  {renderLeftInfoCells(row, rowIndex % 2 === 0 ? 'normal' : 'alt')}
+                  {dates.map((date) => {
+                    const value = Number(row.values?.[date] || 0);
+                    const meta = getDateCellMeta({ date, holidaySet, currentWeekLabel });
+                    return (
+                      <td
+                        key={`balance_${row.entityId}_${date}`}
+                        style={getBodyCellStyle(meta, { negative: value < 0 })}
+                      >
+                        {formatCellValue(value)}
+                      </td>
+                    );
+                  })}
+                  <td
+                    style={{
+                      position: 'sticky',
+                      right: 0,
+                      zIndex: 3,
+                      background: rowIndex % 2 === 0 ? palette.leftCell : palette.leftCellAlt,
+                      border: `1px solid ${palette.shellBorder}`,
+                      boxShadow: '-1px 0 0 rgba(34,50,74,0.95)',
+                      minWidth: '90px',
+                    }}
+                  />
+                </tr>
+              ))}
+              {renderTotalRow({
+                label: 'Total Balance Acum.',
+                dates,
+                values: totals.totalBalance,
+                holidaySet,
+                currentWeekLabel,
+                leftLabelColor: '#f59e0b',
+                valueColor: '#f59e0b',
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {weeklySummary ? (
+          <div
+            style={{
+              position: 'sticky',
+              left: '1rem',
+              bottom: '1rem',
+              width: 'fit-content',
+              minWidth: '390px',
+              maxWidth: '520px',
+              marginTop: '-0.5rem',
+              marginLeft: '1rem',
+              padding: '0.85rem 1rem',
+              borderRadius: '12px',
+              border: '1px solid #2563eb',
+              background: '#ffffff',
+              boxShadow: '0 16px 32px rgba(37, 99, 235, 0.18)',
+              zIndex: 8,
+            }}
+          >
+            <div style={{ color: '#1d4ed8', fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+              {weeklySummary.title}
+            </div>
+
+            <table style={{ width: '100%', marginTop: '0.55rem', fontSize: '0.82rem' }}>
+              <thead>
+                <tr>
+                  <th style={{ background: '#fff', borderBottom: '1px solid #dbe4f0', padding: '0.25rem', textTransform: 'none' }}>Exportadora</th>
+                  <th style={{ background: '#fff', borderBottom: '1px solid #dbe4f0', padding: '0.25rem', textTransform: 'none' }}>Inicio sem.</th>
+                  <th style={{ background: '#fff', borderBottom: '1px solid #dbe4f0', padding: '0.25rem', textTransform: 'none' }}>{usaCurado ? 'Curado' : 'Cosecha'}</th>
+                  <th style={{ background: '#fff', borderBottom: '1px solid #dbe4f0', padding: '0.25rem', textTransform: 'none' }}>Proceso</th>
+                  <th style={{ background: '#fff', borderBottom: '1px solid #dbe4f0', padding: '0.25rem', textTransform: 'none' }}>%</th>
+                  <th style={{ background: '#fff', borderBottom: '1px solid #dbe4f0', padding: '0.25rem', textTransform: 'none' }}>Fin sem.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {weeklySummary.rows.map((row) => (
+                  <tr key={row.exportadora}>
+                    <td style={{ padding: '0.2rem 0.25rem', borderBottom: 'none', color: '#0f172a' }}>{row.exportadora}</td>
+                    <td style={{ padding: '0.2rem 0.25rem', borderBottom: 'none', textAlign: 'right' }}>{formatCellValue(row.openingBalance)}</td>
+                    <td style={{ padding: '0.2rem 0.25rem', borderBottom: 'none', textAlign: 'right', color: '#7c3aed' }}>{formatCellValue(usaCurado ? row.curadoWeek : row.cosechaWeek)}</td>
+                    <td style={{ padding: '0.2rem 0.25rem', borderBottom: 'none', textAlign: 'right', color: '#f97316' }}>{formatCellValue(row.procesoWeek)}</td>
+                    <td style={{ padding: '0.2rem 0.25rem', borderBottom: 'none', textAlign: 'right', color: '#64748b' }}>
+                      {`${row.usagePercent.toFixed(1)}%`}
+                    </td>
+                    <td style={{ padding: '0.2rem 0.25rem', borderBottom: 'none', textAlign: 'right', color: '#10b981' }}>{formatCellValue(row.totalDisponible)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div style={{ marginTop: '0.55rem', borderTop: '1px solid #dbe4f0', paddingTop: '0.55rem', display: 'grid', gridTemplateColumns: 'repeat(4, auto)', gap: '1rem' }}>
+              <div>
+                <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase' }}>Total disp.</div>
+                <div style={{ fontSize: '1.2rem', color: '#0f172a' }}>{formatCellValue(weeklySummary.totalsRow.totalDisponible)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase' }}>Proceso</div>
+                <div style={{ fontSize: '1.2rem', color: '#f97316' }}>{formatCellValue(weeklySummary.totalsRow.procesoWeek)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase' }}>% uso línea</div>
+                <div style={{ fontSize: '1rem', color: '#080808' }}>
+                  {`${weeklySummary.usagePercent.toFixed(1)}%`}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase' }}>Saldo dom.</div>
+                <div style={{ fontSize: '1.2rem', color: '#10b981' }}>{formatCellValue(weeklySummary.totalsRow.totalDisponible)}</div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
+
+      {isFullscreen ? (
+        <div
+          ref={bottomScrollRef}
+          className="balance-grid-shell"
+          style={{
+            overflowX: 'auto',
+            overflowY: 'hidden',
+            marginTop: '0.35rem',
+            paddingBottom: '0.1rem',
+            height: '22px',
+            borderRadius: '999px',
+            background: '#cbd5e1',
+          }}
+        >
+          <div
+            style={{
+              width: `${Math.max(bottomTrackWidth, 1)}px`,
+              height: '1px',
+            }}
+          />
+        </div>
+      ) : null}
     </section>
   );
 };

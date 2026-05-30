@@ -1,24 +1,8 @@
 import { useMemo, useState } from 'react';
 import { appConfig } from '../../app/config';
+import { createApiClient } from '../../services/api';
 
-const apiUrl = appConfig.apiBaseUrl;
-
-const requestJson = async (path, options = {}) => {
-  const response = await fetch(`${apiUrl}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || 'Error en restricciones.');
-  }
-
-  return response.json().catch(() => ({}));
-};
+const api = createApiClient(appConfig.apiBaseUrl);
 
 export const RestrictionTypeEditor = ({
   tiposRestriccion,
@@ -29,6 +13,7 @@ export const RestrictionTypeEditor = ({
     color: '#dc2626',
   });
 
+  const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -45,32 +30,40 @@ export const RestrictionTypeEditor = ({
 
     try {
       if (!form.nombre.trim()) {
-        throw new Error('El nombre del tipo de restricción es obligatorio.');
+        throw new Error('El nombre del tipo de restriccion es obligatorio.');
       }
 
-      const created = await requestJson('/tipos-restriccion', {
-        method: 'POST',
-        body: JSON.stringify({
+      if (editingId) {
+        await api.put(`/tipos-restriccion/${editingId}`, {
           nombre: form.nombre.trim(),
           color: form.color || '#dc2626',
-        }),
-      });
+        });
+        setTiposRestriccion((current) =>
+          current.map((item) =>
+            Number(item.id) === Number(editingId)
+              ? { ...item, nombre: form.nombre.trim(), color: form.color || '#dc2626' }
+              : item,
+          ),
+        );
+        setEditingId(null);
+      } else {
+        const created = await api.post('/tipos-restriccion', {
+          nombre: form.nombre.trim(),
+          color: form.color || '#dc2626',
+        });
+        setTiposRestriccion((current) => {
+          const exists = current.some((item) => Number(item.id) === Number(created.id));
+          if (exists) {
+            return current.map((item) =>
+              Number(item.id) === Number(created.id) ? created : item,
+            );
+          }
+          return [...current, created];
+        });
+      }
 
-      setTiposRestriccion((current) => {
-        const exists = current.some((item) => Number(item.id) === Number(created.id));
-        if (exists) {
-          return current.map((item) =>
-            Number(item.id) === Number(created.id) ? created : item,
-          );
-        }
-        return [...current, created];
-      });
-
-      setSuccess(`Tipo de restricción ${form.nombre} guardado correctamente.`);
-      setForm({
-        nombre: '',
-        color: '#dc2626',
-      });
+      setSuccess(`Tipo de restriccion ${form.nombre} guardado correctamente.`);
+      setForm({ nombre: '', color: '#dc2626' });
     } catch (saveError) {
       setError(saveError.message);
     } finally {
@@ -78,23 +71,33 @@ export const RestrictionTypeEditor = ({
     }
   };
 
+  const editTipo = (tipo) => {
+    setEditingId(tipo.id);
+    setForm({ nombre: tipo.nombre, color: tipo.color || '#dc2626' });
+    setError(null);
+    setSuccess(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setForm({ nombre: '', color: '#dc2626' });
+  };
+
   const deleteTipo = async (id) => {
-    if (!window.confirm('¿Eliminar este tipo de restricción?')) return;
+    if (!window.confirm('Eliminar este tipo de restriccion?')) return;
 
     setSaving(true);
     setError(null);
     setSuccess(null);
 
     try {
-      await requestJson(`/tipos-restriccion/${id}`, {
-        method: 'DELETE',
-      });
+      await api.delete(`/tipos-restriccion/${id}`);
 
       setTiposRestriccion((current) =>
         current.filter((item) => Number(item.id) !== Number(id)),
       );
 
-      setSuccess('Tipo de restricción eliminado correctamente.');
+      setSuccess('Tipo de restriccion eliminado correctamente.');
     } catch (deleteError) {
       setError(deleteError.message);
     } finally {
@@ -107,7 +110,7 @@ export const RestrictionTypeEditor = ({
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Restricciones</p>
-          <h2>Tipos de restricción</h2>
+          <h2>Tipos de restriccion</h2>
         </div>
       </div>
 
@@ -116,7 +119,7 @@ export const RestrictionTypeEditor = ({
 
       <div
         className="panel panel--compact"
-        style={{ marginBottom: '1rem', display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '1rem', alignItems: 'end' }}
+        style={{ marginBottom: '1rem', display: 'grid', gridTemplateColumns: '2fr 1fr auto auto', gap: '1rem', alignItems: 'end', borderColor: editingId ? '#2563eb' : undefined }}
       >
         <label>
           <div className="stat-label">Nombre</div>
@@ -148,13 +151,23 @@ export const RestrictionTypeEditor = ({
             padding: '0.75rem 1rem',
             borderRadius: '12px',
             border: 'none',
-            background: '#0f62fe',
+            background: editingId ? '#2563eb' : '#0f62fe',
             color: '#fff',
             cursor: 'pointer',
           }}
         >
-          Guardar tipo
+          {editingId ? 'Actualizar' : 'Guardar tipo'}
         </button>
+
+        {editingId ? (
+          <button
+            disabled={saving}
+            onClick={cancelEdit}
+            style={{ padding: '0.75rem 1rem', borderRadius: '12px', border: '1px solid #cbd5e1', background: '#fff', cursor: 'pointer' }}
+          >
+            Cancelar
+          </button>
+        ) : null}
       </div>
 
       <div className="table-wrap">
@@ -164,7 +177,7 @@ export const RestrictionTypeEditor = ({
               <th>Nombre</th>
               <th>Color</th>
               <th>Vista</th>
-              <th>Acción</th>
+              <th>Accion</th>
             </tr>
           </thead>
           <tbody>
@@ -188,7 +201,13 @@ export const RestrictionTypeEditor = ({
                     {tipo.nombre}
                   </span>
                 </td>
-                <td>
+                <td style={{ display: 'flex', gap: '0.4rem' }}>
+                  <button
+                    disabled={saving}
+                    onClick={() => editTipo(tipo)}
+                  >
+                    Editar
+                  </button>
                   <button
                     disabled={saving}
                     onClick={() => deleteTipo(tipo.id)}

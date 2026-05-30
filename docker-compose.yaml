@@ -1,0 +1,54 @@
+services:
+  balance_backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: balance_backend
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      PORT: 4001
+      DB_SERVER: ${DB_SERVER:?DB_SERVER is required}
+      DB_PORT: ${DB_PORT:-1433}
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      DB_USER: ${DB_USER:?DB_USER is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4001/healthz').then((res) => { process.exit(res.ok ? 0 : 1); }).catch(() => process.exit(1));"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    ports:
+      - "4001:4001"
+    restart: unless-stopped
+    networks:
+      - balance_net
+
+  balance_frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: balance_frontend
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://172.20.20.5:4001/api}
+      VITE_PLANNING_START: ${VITE_PLANNING_START:-2026-03-12}
+      VITE_PLANNING_DAYS: ${VITE_PLANNING_DAYS:-100}
+    depends_on:
+      balance_backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+    networks:
+      - balance_net
+
+networks:
+  balance_net:
+    driver: bridge

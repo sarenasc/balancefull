@@ -1,0 +1,20 @@
+node_modules
+dist
+.git
+.gitignore
+Dockerfile*
+docker-compose.yml
+docker-compose.yaml
+balance.zip
+BalanceFull.zip
+npm-debug.log*
+.env
+.env.*
+!.env.example
+.claude
+CLAUDE.md
+AGENTS.md
+revision.txt
+*.patch
+*.sql
+copiar a.txt

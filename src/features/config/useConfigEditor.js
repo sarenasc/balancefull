@@ -1,24 +1,8 @@
 import { useState } from 'react';
 import { appConfig } from '../../app/config';
+import { createApiClient } from '../../services/api';
 
-const apiUrl = appConfig.apiBaseUrl;
-
-const requestJson = async (path, options = {}) => {
-  const response = await fetch(`${apiUrl}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || 'No fue posible guardar configuración.');
-  }
-
-  return response.json().catch(() => ({}));
-};
+const api = createApiClient(appConfig.apiBaseUrl);
 
 export const useConfigEditor = ({
   entities,
@@ -47,17 +31,14 @@ export const useConfigEditor = ({
     );
 
     try {
-      await requestJson(`/exportadoras/${entity.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          nombre: entity.exportadora,
-          especie: entity.especie,
-          especie_id: entity.especieId,
-          variedad: entity.variedad,
-          color_idx: entity.colorIdx,
-          visible_linea: nextValue,
-          activa: 1,
-        }),
+      await api.put(`/exportadoras/${entity.id}`, {
+        nombre: entity.exportadora,
+        especie: entity.especie,
+        especie_id: entity.especieId,
+        variedad: entity.variedad,
+        color_idx: entity.colorIdx,
+        visible_linea: nextValue,
+        activa: 1,
       });
       setSuccess(`Visibilidad actualizada para ${entity.label}.`);
     } catch (saveError) {
@@ -89,11 +70,8 @@ export const useConfigEditor = ({
     });
 
     try {
-      await requestJson('/configuracion', {
-        method: 'PUT',
-        body: JSON.stringify(payload),
-      });
-      setSuccess('Parámetros estándar guardados correctamente.');
+      await api.put('/configuracion', payload);
+      setSuccess('Parametros estandar guardados correctamente.');
     } catch (saveError) {
       setDefaultParameters(previous);
       setError(saveError.message);
@@ -141,11 +119,8 @@ export const useConfigEditor = ({
     });
 
     try {
-      await requestJson('/parametros-especie', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-      setSuccess(`Parámetros guardados para ${especie.nombre}.`);
+      await api.post('/parametros-especie', payload);
+      setSuccess(`Parametros guardados para ${especie.nombre}.`);
     } catch (saveError) {
       setParametrosEspecie(previous);
       setError(saveError.message);

@@ -1,23 +1,14 @@
+import { addDays, getCuradoReleaseDate } from '../../utils/date';
+
 const normalizeDate = (value) => {
   if (!value) return null;
   if (typeof value === 'string') return value.slice(0, 10);
   return new Date(value).toISOString().slice(0, 10);
 };
 
-const addDays = (dateString, days) => {
-  const date = new Date(`${dateString}T12:00:00`);
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
-};
-
 const safeNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const hoursToDays = (hours) => {
-  const safe = safeNumber(hours);
-  return Math.max(0, Math.ceil(safe / 24));
 };
 
 const getEntityLabel = (entity) =>
@@ -28,6 +19,9 @@ const getEntityLabel = (entity) =>
 
 const buildSpeciesMap = (especies = []) =>
   new Map(especies.map((item) => [Number(item.id), item]));
+
+const getEntitySpeciesId = (entity) =>
+  Number(entity?.especieId ?? entity?.especie_id ?? 0);
 
 const buildFamilyDateRange = (familia, fallbackDates = []) => {
   const start = normalizeDate(familia?.fecha_inicio) || fallbackDates[0] || null;
@@ -56,7 +50,7 @@ const buildEntityFamilyMap = ({ entities = [], especies = [] }) => {
 
   return new Map(
     entities.map((entity) => {
-      const especie = speciesMap.get(Number(entity.especie_id));
+      const especie = speciesMap.get(getEntitySpeciesId(entity));
       return [Number(entity.id), Number(especie?.familia_id ?? entity?.familia_id ?? 0)];
     }),
   );
@@ -90,7 +84,7 @@ const buildCuradoAutoMap = ({
         curadoHoursConfig?.[entityId] ?? entity?.horas_curado ?? 0,
       );
 
-      const releaseDate = addDays(date, hoursToDays(curadoHours));
+      const releaseDate = getCuradoReleaseDate(date, curadoHours);
       if (!familyDateSet.has(releaseDate)) return;
 
       result[entityId][releaseDate] += cosecha;
@@ -100,6 +94,22 @@ const buildCuradoAutoMap = ({
   return result;
 };
 
+const buildDailyBinsMap = (parametrosDia = []) =>
+  new Map(
+    parametrosDia.map((item) => [
+      `${Number(item.exportadora_id)}|${normalizeDate(item.fecha)}`,
+      safeNumber(item.bins_por_hora),
+    ]),
+  );
+
+const buildDailyExtrasMap = (horasExtraDia = []) =>
+  new Map(
+    horasExtraDia.map((item) => [
+      `${Number(item.exportadora_id)}|${normalizeDate(item.fecha)}`,
+      safeNumber(item.horas_extra),
+    ]),
+  );
+
 const buildFamilySections = ({
   family,
   familyDates,
@@ -107,6 +117,8 @@ const buildFamilySections = ({
   data,
   curadoHoursConfig,
   parametersBySpeciesId,
+  parametrosDia,
+  horasExtraDia,
 }) => {
   const curadoAutoMap = buildCuradoAutoMap({
     familyEntities,
@@ -115,6 +127,8 @@ const buildFamilySections = ({
     data,
     curadoHoursConfig,
   });
+  const dailyBinsMap = buildDailyBinsMap(parametrosDia);
+  const dailyExtrasMap = buildDailyExtrasMap(horasExtraDia);
 
   const sections = {
     cosecha: [],
@@ -137,7 +151,7 @@ const buildFamilySections = ({
 
   familyEntities.forEach((entity) => {
     const entityId = Number(entity.id);
-    const especieId = Number(entity.especie_id ?? 0);
+    const especieId = getEntitySpeciesId(entity);
     const params =
       parametersBySpeciesId?.get?.(especieId) ||
       parametersBySpeciesId?.get?.(null) || {
@@ -150,6 +164,8 @@ const buildFamilySections = ({
     const curadoValues = {};
     const procesoValues = {};
     const balanceValues = {};
+    const binsPerHourValues = {};
+    const isOverrideValues = {};
 
     let runningBalance = 0;
 
@@ -178,9 +194,19 @@ const buildFamilySections = ({
 
       balanceValues[date] = runningBalance;
 
+      const dayKey = `${entityId}|${date}`;
+      const hasOverride = dailyBinsMap.has(dayKey);
+      const binsPorHoraDia = hasOverride
+        ? dailyBinsMap.get(dayKey)
+        : Math.max(1, safeNumber(params.bins_por_hora || 18));
+
+      const extraHoras = dailyExtrasMap.get(`${entityId}|${date}`) || 0;
+
+      binsPerHourValues[date] = binsPorHoraDia;
+      isOverrideValues[date] = hasOverride;
+
       totals.totalProceso[date] += proceso;
-      totals.totalHorasProceso[date] +=
-        proceso / Math.max(1, safeNumber(params.bins_por_hora || 18));
+      totals.totalHorasProceso[date] += proceso / Math.max(1, binsPorHoraDia) + extraHoras;
       totals.totalBalance[date] += runningBalance;
     });
 
@@ -209,6 +235,8 @@ const buildFamilySections = ({
       ...baseRow,
       field: 'proceso',
       values: procesoValues,
+      binsPerHourValues,
+      isOverrideValues,
     });
 
     sections.balance.push({
@@ -229,6 +257,8 @@ export const buildBalanceModel = ({
   data = {},
   curadoHoursConfig = {},
   parametersBySpeciesId,
+  parametrosDia = [],
+  horasExtraDia = [],
 }) => {
   const entityFamilyMap = buildEntityFamilyMap({ entities, especies });
 
@@ -239,7 +269,9 @@ export const buildBalanceModel = ({
       const familyDates = buildFamilyDateRange(familia, dates);
 
       const familyEntities = entities.filter(
-        (entity) => Number(entityFamilyMap.get(Number(entity.id))) === familyId,
+        (entity) =>
+          Number(entityFamilyMap.get(Number(entity.id))) === familyId &&
+          Number(entity?.visibleLinea ?? entity?.visible_linea ?? 1) === 1,
       );
 
       const { sections, totals } = buildFamilySections({
@@ -249,6 +281,8 @@ export const buildBalanceModel = ({
         data,
         curadoHoursConfig,
         parametersBySpeciesId,
+        parametrosDia,
+        horasExtraDia,
       });
 
       return {
@@ -264,5 +298,8 @@ export const buildBalanceModel = ({
       };
     });
 
-  return { families };
+  return {
+    generatedAt: new Date().toISOString(),
+    families,
+  };
 };
